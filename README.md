@@ -23,8 +23,8 @@ Automated bibliography management for Anytype with DOI extraction, BibTeX genera
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/anytype-bibliography-manager.git
-cd anytype-bibliography-manager
+git clone https://github.com/albertomercurio/Anytype-Bibliography-Manager.git
+cd Anytype-Bibliography-Manager
 
 # Install globally (recommended)
 npm install -g .
@@ -76,10 +76,10 @@ anytype-bib test
 anytype-bib add
 
 # With DOI directly
-anytype-bib add "10.1103/PhysRevLett.130.213604"
+anytype-bib add 10.1103/PhysRevLett.130.213604
 
 # With options
-anytype-bib add "10.1103/PhysRevLett.130.213604" --auto-resolve --pdf paper.pdf
+anytype-bib add 10.1103/PhysRevLett.130.213604 --auto-resolve --pdf paper.pdf
 ```
 
 ### Batch import
