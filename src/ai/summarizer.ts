@@ -17,13 +17,13 @@ export class OpenAISummarizer implements AIProvider {
     }
   }
 
-  async summarizePDF(pdfPath: string): Promise<string | null> {
+  async summarizePDF(_pdfPath: string): Promise<string | null> {
     // TODO: Implement PDF text extraction and OpenAI summarization
     console.log('OpenAI PDF summarization not yet implemented');
     return null;
   }
 
-  async resolveAuthorAmbiguity(candidates: any[], context: string): Promise<number> {
+  async resolveAuthorAmbiguity(_candidates: any[], _context: string): Promise<number> {
     // TODO: Use OpenAI to help resolve author ambiguity
     return 0;
   }
@@ -39,13 +39,13 @@ export class AnthropicSummarizer implements AIProvider {
     }
   }
 
-  async summarizePDF(pdfPath: string): Promise<string | null> {
+  async summarizePDF(_pdfPath: string): Promise<string | null> {
     // TODO: Implement PDF text extraction and Claude summarization
     console.log('Claude PDF summarization not yet implemented');
     return null;
   }
 
-  async resolveAuthorAmbiguity(candidates: any[], context: string): Promise<number> {
+  async resolveAuthorAmbiguity(_candidates: any[], _context: string): Promise<number> {
     // TODO: Use Claude to help resolve author ambiguity
     return 0;
   }

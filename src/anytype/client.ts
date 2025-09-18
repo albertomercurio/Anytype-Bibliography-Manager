@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import * as dotenv from 'dotenv';
-import { AnytypeObject, AnytypeProperty, ANYTYPE_TYPES } from '../types/anytype';
+import { AnytypeObject } from '../types/anytype';
 
 dotenv.config();
 
@@ -128,13 +128,19 @@ export class AnytypeClient {
     ]);
   }
 
-  async createObject(typeId: string, properties: Record<string, any>): Promise<string | null> {
+  async createObject(typeKey: string, name: string, properties: Array<{ key: string; [key: string]: any }>): Promise<string | null> {
     try {
-      const response = await this.client.post(`/spaces/${this.spaceId}/objects`, {
-        type: typeId,
-        properties
-      });
-      return response.data.data?.id || null;
+      const requestBody: any = {
+        type_key: typeKey,
+        name
+      };
+
+      if (properties.length > 0) {
+        requestBody.properties = properties;
+      }
+
+      const response = await this.client.post(`/spaces/${this.spaceId}/objects`, requestBody);
+      return response.data.object?.id || null;
     } catch (error: any) {
       console.error('Error creating object:', error.response?.data || error.message);
       return null;
@@ -162,29 +168,28 @@ export class AnytypeClient {
     url?: string;
     bibtex?: string;
   }): Promise<string | null> {
-    const properties: Record<string, any> = {
-      name: article.title,
-      title: article.title,
-      doi: article.doi.toLowerCase()
-    };
+    const properties: Array<{ key: string; [key: string]: any }> = [
+      { key: 'title', text: article.title },
+      { key: 'doi', text: article.doi.toLowerCase() }
+    ];
 
     if (article.authors?.length) {
-      properties.authors = article.authors;
+      properties.push({ key: 'authors', objects: article.authors });
     }
     if (article.year) {
-      properties.year = article.year;
+      properties.push({ key: 'year', number: article.year });
     }
     if (article.journal) {
-      properties.journal = [article.journal];
+      properties.push({ key: 'journal', objects: [article.journal] });
     }
     if (article.url) {
-      properties.url = article.url;
+      properties.push({ key: 'url', url: article.url });
     }
     if (article.bibtex) {
-      properties.bib_te_x = article.bibtex;
+      properties.push({ key: 'bib_te_x', text: article.bibtex });
     }
 
-    return this.createObject(ANYTYPE_TYPES.ARTICLE, properties);
+    return this.createObject('reference', article.title, properties);
   }
 
   async createPerson(person: {
@@ -194,28 +199,26 @@ export class AnytypeClient {
     email?: string;
   }): Promise<string | null> {
     const name = [person.firstName, person.lastName].filter(Boolean).join(' ');
-    const properties: Record<string, any> = {
-      name
-    };
+    const properties: Array<{ key: string; [key: string]: any }> = [];
 
     if (person.firstName) {
-      properties.first_name = person.firstName;
+      properties.push({ key: 'first_name', text: person.firstName });
     }
     if (person.lastName) {
-      properties.last_name = person.lastName;
+      properties.push({ key: 'last_name', text: person.lastName });
     }
     if (person.orcid) {
-      properties.orcid = person.orcid;
+      properties.push({ key: 'orcid', text: person.orcid });
     }
     if (person.email) {
-      properties.email = person.email;
+      properties.push({ key: 'email', email: person.email });
     }
 
-    return this.createObject(ANYTYPE_TYPES.PERSON, properties);
+    return this.createObject('human', name, properties);
   }
 
   async createJournal(name: string): Promise<string | null> {
-    return this.createObject(ANYTYPE_TYPES.JOURNAL, { name });
+    return this.createObject('journal', name, []);
   }
 
   async createBook(book: {
@@ -224,20 +227,18 @@ export class AnytypeClient {
     year?: number;
     bibtex?: string;
   }): Promise<string | null> {
-    const properties: Record<string, any> = {
-      name: book.title
-    };
+    const properties: Array<{ key: string; [key: string]: any }> = [];
 
     if (book.authors?.length) {
-      properties.authors = book.authors;
+      properties.push({ key: 'authors', objects: book.authors });
     }
     if (book.year) {
-      properties.year = book.year;
+      properties.push({ key: 'year', number: book.year });
     }
     if (book.bibtex) {
-      properties.bib_te_x = book.bibtex;
+      properties.push({ key: 'bib_te_x', text: book.bibtex });
     }
 
-    return this.createObject(ANYTYPE_TYPES.BOOK, properties);
+    return this.createObject('book', book.title, properties);
   }
 }

@@ -1,8 +1,8 @@
 import { AnytypeClient } from '../anytype/client';
 import { DOIResolver } from './doi-resolver';
 import { BibTeXFormatter } from './bibtex-formatter';
-import { DuplicateDetector, DuplicateCandidate } from './duplicate-detector';
-import { DOIMetadata, AuthorInfo } from '../types/crossref';
+import { DuplicateDetector } from './duplicate-detector';
+import { AuthorInfo } from '../types/crossref';
 import chalk from 'chalk';
 import inquirer from 'inquirer';
 import ora from 'ora';
@@ -141,7 +141,7 @@ export class BibliographyManager {
         console.log(chalk.yellow('  Possible duplicates found:'));
 
         const choices = [
-          ...duplicates.slice(0, 5).map((dup, i) => ({
+          ...duplicates.slice(0, 5).map((dup) => ({
             name: `${dup.object.name} (${dup.matchReason}, ${Math.round(dup.similarity * 100)}% match)`,
             value: dup.object.id
           })),
@@ -200,7 +200,7 @@ export class BibliographyManager {
       console.log(chalk.yellow('  Possible duplicates found:'));
 
       const choices = [
-        ...duplicates.slice(0, 5).map((dup, i) => ({
+        ...duplicates.slice(0, 5).map((dup) => ({
           name: `${dup.object.name} (${dup.matchReason}, ${Math.round(dup.similarity * 100)}% match)`,
           value: dup.object.id
         })),
