@@ -48,19 +48,11 @@ export class AnytypeClient {
   async searchByType(typeKey: string, limit = 100): Promise<AnytypeObject[]> {
     try {
       const response = await this.client.post(`/spaces/${this.spaceId}/search`, {
-        filters: [
-          {
-            property: 'type',
-            condition: 'equals',
-            value: typeKey
-          }
-        ],
+        types: [typeKey],
         limit
       });
 
-      // Filter results to ensure they actually match the type we want
-      const results = response.data.data || [];
-      return results.filter((obj: any) => obj.type.key === typeKey);
+      return response.data.data || [];
     } catch (error) {
       console.error('Error searching by type:', error);
       return [];
@@ -70,25 +62,12 @@ export class AnytypeClient {
   async searchArticlesByDOI(doi: string): Promise<AnytypeObject[]> {
     try {
       const response = await this.client.post(`/spaces/${this.spaceId}/search`, {
-        filters: [
-          {
-            property: 'type',
-            condition: 'equals',
-            value: 'reference'
-          },
-          {
-            property: 'doi',
-            condition: 'equals',
-            value: doi.toLowerCase()
-          }
-        ]
+        types: ['reference']
       });
 
       const results = response.data.data || [];
-      // Filter to ensure we only get reference objects with the exact DOI
+      // Filter client-side since API property filters don't work
       return results.filter((obj: any) => {
-        if (obj.type.key !== 'reference') return false;
-
         const doiProp = obj.properties?.find((p: any) => p.key === 'doi');
         if (!doiProp) return false;
 
@@ -102,55 +81,45 @@ export class AnytypeClient {
   }
 
   async searchPersonsByName(lastName: string, firstName?: string): Promise<AnytypeObject[]> {
-    const filters: any[] = [
-      {
-        property: 'type',
-        condition: 'equals',
-        value: 'human'
-      }
-    ];
-
-    if (lastName) {
-      filters.push({
-        property: 'last_name',
-        condition: 'contains',
-        value: lastName
+    try {
+      const response = await this.client.post(`/spaces/${this.spaceId}/search`, {
+        types: ['human']
       });
-    }
 
-    if (firstName) {
-      filters.push({
-        property: 'first_name',
-        condition: 'contains',
-        value: firstName
+      const results = response.data.data || [];
+      // Filter client-side since API property filters don't work
+      return results.filter((obj: any) => {
+        if (!lastName) return true;
+
+        const lastNameProp = obj.properties?.find((p: any) => p.key === 'last_name');
+        const lastNameValue = lastNameProp?.text || lastNameProp?.value || '';
+
+        const lastNameMatch = lastNameValue.toLowerCase().includes(lastName.toLowerCase());
+
+        if (firstName) {
+          const firstNameProp = obj.properties?.find((p: any) => p.key === 'first_name');
+          const firstNameValue = firstNameProp?.text || firstNameProp?.value || '';
+          const firstNameMatch = firstNameValue.toLowerCase().includes(firstName.toLowerCase());
+          return lastNameMatch && firstNameMatch;
+        }
+
+        return lastNameMatch;
       });
+    } catch (error) {
+      console.error('Error searching persons by name:', error);
+      return [];
     }
-
-    return this.searchObjects(filters);
   }
 
   async searchPersonsByOrcid(orcid: string): Promise<AnytypeObject[]> {
     try {
       const response = await this.client.post(`/spaces/${this.spaceId}/search`, {
-        filters: [
-          {
-            property: 'type',
-            condition: 'equals',
-            value: 'human'
-          },
-          {
-            property: 'orcid',
-            condition: 'equals',
-            value: orcid
-          }
-        ]
+        types: ['human']
       });
 
       const results = response.data.data || [];
-      // Filter to ensure we only get person objects with the exact ORCID
+      // Filter client-side since API property filters don't work
       return results.filter((obj: any) => {
-        if (obj.type.key !== 'human') return false;
-
         const orcidProp = obj.properties?.find((p: any) => p.key === 'orcid');
         if (!orcidProp) return false;
 
@@ -164,32 +133,25 @@ export class AnytypeClient {
   }
 
   async searchJournalsByName(name: string): Promise<AnytypeObject[]> {
-    // First try exact match
+    // Get all journals and filter client-side since API property filters don't work
     try {
       const response = await this.client.post(`/spaces/${this.spaceId}/search`, {
-        filters: [
-          {
-            property: 'type',
-            condition: 'equals',
-            value: 'journal'
-          },
-          {
-            property: 'name',
-            condition: 'equals',
-            value: name
-          }
-        ]
+        types: ['journal']
       });
 
-      const exactMatches = response.data.data || [];
-      const filteredExact = exactMatches.filter((obj: any) => obj.type.key === 'journal');
+      const allJournals = response.data.data || [];
 
-      if (filteredExact.length > 0) {
-        return filteredExact;
+      // First try exact match
+      const exactMatches = allJournals.filter((obj: any) =>
+        obj.name && obj.name.toLowerCase() === name.toLowerCase()
+      );
+
+      if (exactMatches.length > 0) {
+        return exactMatches;
       }
 
-      // Then try all journals for similarity checking
-      return this.searchByType('journal');
+      // Return all journals for similarity checking
+      return allJournals;
     } catch (error) {
       console.error('Error searching journals by name:', error);
       return [];

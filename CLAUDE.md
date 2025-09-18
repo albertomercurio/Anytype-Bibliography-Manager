@@ -68,12 +68,8 @@ Setup
 
 ⸻
 
-Next Steps
-	•	Study the Anytype API documentation thoroughly: https://developers.anytype.io/docs/reference/2025-05-20/anytype-api
-	•	Decide on the framework/language (Python vs TypeScript).
-	•	Implement DOI → Anytype object pipeline.
-	•	Add BibTeX post-processing rules.
-	•	Build duplicate detection layer.
-	•	(Optional) Integrate AI assistance.
+**Important Notes**
+    •	Study very deeply the Anytype API docs to understand how to best interact with it: https://developers.anytype.io/docs/reference/2025-05-20/anytype-api.
+    •	Always use their best API calls (e.g. search) instead of building your own logic, when you are not sure.
 
 ⸻
