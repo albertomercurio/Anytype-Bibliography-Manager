@@ -19,6 +19,8 @@ Automated bibliography management for Anytype with DOI extraction, BibTeX genera
 - Active Anytype account with API access
 - A Research space with object types for articles, people, journals, and books (the tool will automatically discover these during setup)
 
+> **Note**: The project is written in TypeScript and needs to be compiled before installation. All build tools are included as dependencies.
+
 ## Installation
 
 ```bash
@@ -26,16 +28,21 @@ Automated bibliography management for Anytype with DOI extraction, BibTeX genera
 git clone https://github.com/albertomercurio/Anytype-Bibliography-Manager.git
 cd Anytype-Bibliography-Manager
 
+# Install dependencies
+npm install
+
+# Build the project (compile TypeScript to JavaScript)
+npm run build
+
 # Install globally (recommended)
 npm install -g .
 
-# Or for development
+# Or for development (with hot reload)
 npm install
-npm run build
-npm link
+npm run dev  # This runs the tool directly from TypeScript source
 ```
 
-After installation, you can use `anytype-bib` from anywhere in your terminal instead of `npx tsx src/cli/index.ts`.
+After global installation, you can use `anytype-bib` from anywhere in your terminal.
 
 ## Setup
 
@@ -161,8 +168,14 @@ If you have an existing `.env` file, run `anytype-bib setup` and it will offer t
 ## Development
 
 ```bash
-# Run in development mode with auto-reload
+# Install dependencies
+npm install
+
+# Run in development mode with auto-reload (no build required)
 npm run dev
+
+# Build the project
+npm run build
 
 # Run tests
 npm test
@@ -170,9 +183,11 @@ npm test
 # Lint code
 npm run lint
 
-# Build for production
-npm run build
+# Install locally for testing (after building)
+npm link
 ```
+
+For development, use `npm run dev` which runs the TypeScript source directly with hot reload. For production use, run `npm run build` first to compile the TypeScript to JavaScript.
 
 ## Troubleshooting
 
