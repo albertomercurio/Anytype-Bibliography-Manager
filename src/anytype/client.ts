@@ -1,26 +1,30 @@
 import axios, { AxiosInstance } from 'axios';
-import * as dotenv from 'dotenv';
 import { AnytypeObject } from '../types/anytype';
-
-dotenv.config();
+import { ConfigManager } from '../core/config-manager';
 
 export class AnytypeClient {
   private client: AxiosInstance;
   private spaceId: string;
 
   constructor() {
-    const apiKey = process.env.ANYTYPE_API_KEY;
-    const host = process.env.ANYTYPE_HOST || 'localhost';
-    const port = process.env.ANYTYPE_PORT || '31009';
-    this.spaceId = process.env.ANYTYPE_SPACE_ID || '';
+    const configManager = new ConfigManager();
+    const config = configManager.getConfig();
+
+    if (!config) {
+      throw new Error('Configuration not found. Please run "anytype-bib setup" first.');
+    }
+
+    const { apiKey, host, port, spaceId } = config.anytype;
 
     if (!apiKey) {
-      throw new Error('ANYTYPE_API_KEY is not set in environment variables');
+      throw new Error('Anytype API key not configured. Please run "anytype-bib setup".');
     }
 
-    if (!this.spaceId) {
-      throw new Error('ANYTYPE_SPACE_ID is not set in environment variables');
+    if (!spaceId) {
+      throw new Error('Anytype Space ID not configured. Please run "anytype-bib setup".');
     }
+
+    this.spaceId = spaceId;
 
     this.client = axios.create({
       baseURL: `http://${host}:${port}/v1`,

@@ -4,12 +4,18 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import inquirer from 'inquirer';
 import * as fs from 'fs';
-import * as path from 'path';
-import * as dotenv from 'dotenv';
 import { BibliographyManager } from '../core/bibliography-manager';
+import { ConfigManager } from '../core/config-manager';
 
-// Load environment variables
-dotenv.config();
+// Helper function to check if configuration exists
+function ensureConfigured(): void {
+  const configManager = new ConfigManager();
+  if (!configManager.isConfigured()) {
+    console.error(chalk.red('❌ Configuration not found.'));
+    console.log(chalk.yellow('Please run "anytype-bib setup" first to configure your Anytype connection.'));
+    process.exit(1);
+  }
+}
 
 const program = new Command();
 
@@ -77,6 +83,8 @@ Duplicate Resolution:
 `)
   .action(async (doi, options) => {
     try {
+      ensureConfigured();
+      
       if (!doi) {
         const answer = await inquirer.prompt([{
           type: 'input',
@@ -141,6 +149,8 @@ Processing Details:
 `)
   .action(async (file, options) => {
     try {
+      ensureConfigured();
+      
       if (!fs.existsSync(file)) {
         throw new Error(`File not found: ${file}`);
       }
@@ -184,14 +194,14 @@ Processing Details:
 program
   .command('setup')
   .description('Configure Anytype API connection and optional AI integration interactively')
-  .option('--reset', 'Reset and overwrite existing configuration file (.env)')
+  .option('--reset', 'Reset and overwrite existing configuration file')
   .addHelpText('after', `
 Options:
-  --reset                 Overwrite existing .env file with new configuration
+  --reset                 Delete existing configuration and start fresh
 
 Examples:
   $ anytype-bib setup                    # Initial setup or update existing config
-  $ anytype-bib setup --reset           # Start fresh, ignore existing .env
+  $ anytype-bib setup --reset           # Start fresh, delete existing config
 
 What you'll need before running setup:
   1. Anytype desktop app installed, running, and logged into your account
@@ -204,8 +214,8 @@ Setup Process:
   2. Asks for your Space ID (required)
   3. Confirms Anytype host and port (default: localhost:31009)
   4. Optionally configures AI integration (OpenAI or Anthropic)
-  5. Creates or updates .env file with your configuration
-  6. Validates the configuration can connect to Anytype
+  5. Creates or updates configuration file in ~/.anytype-bib/config.json
+  6. Configuration works globally from any directory
 
 After setup, use 'anytype-bib test' to verify your connection works.
 
@@ -217,8 +227,29 @@ Troubleshooting:
   .action(async (options) => {
     console.log(chalk.blue('🔧 Anytype Bibliography Manager Setup\n'));
 
+    const configManager = new ConfigManager();
+
     if (options.reset) {
       console.log(chalk.yellow('🔄 Resetting existing configuration...\n'));
+      configManager.deleteConfig();
+    }
+
+    // Check if migrating from .env file
+    const envConfig = ConfigManager.fromEnvironment();
+    if (envConfig && !configManager.isConfigured()) {
+      const migrateAnswer = await inquirer.prompt([{
+        type: 'confirm',
+        name: 'migrate',
+        message: 'Found existing .env configuration. Would you like to migrate to the new config system?',
+        default: true
+      }]);
+
+      if (migrateAnswer.migrate) {
+        configManager.saveConfig(envConfig);
+        console.log(chalk.green('✅ Configuration migrated successfully!'));
+        console.log(chalk.gray(`Configuration saved to: ${configManager.getConfigPath()}`));
+        return;
+      }
     }
 
     const answers = await inquirer.prompt([
@@ -254,13 +285,23 @@ Troubleshooting:
       }
     ]);
 
-    let envContent = `# Anytype Configuration
-ANYTYPE_API_KEY=${answers.apiKey}
-ANYTYPE_SPACE_ID=${answers.spaceId}
-ANYTYPE_HOST=${answers.host}
-ANYTYPE_PORT=${answers.port}
-
-`;
+    const config = {
+      anytype: {
+        apiKey: answers.apiKey,
+        spaceId: answers.spaceId,
+        host: answers.host,
+        port: answers.port
+      },
+      ai: {
+        openaiApiKey: '',
+        anthropicApiKey: ''
+      },
+      settings: {
+        debug: false,
+        maxRetryAttempts: 3,
+        duplicateThreshold: 0.8
+      }
+    };
 
     if (answers.aiSetup) {
       const aiAnswers = await inquirer.prompt([
@@ -279,37 +320,22 @@ ANYTYPE_PORT=${answers.port}
       ]);
 
       if (aiAnswers.aiProvider === 'OpenAI') {
-        envContent += `# AI Integration
-OPENAI_API_KEY=${aiAnswers.apiKey || ''}
-ANTHROPIC_API_KEY=
-
-`;
+        config.ai!.openaiApiKey = aiAnswers.apiKey || '';
       } else if (aiAnswers.aiProvider === 'Anthropic') {
-        envContent += `# AI Integration
-OPENAI_API_KEY=
-ANTHROPIC_API_KEY=${aiAnswers.apiKey || ''}
-
-`;
+        config.ai!.anthropicApiKey = aiAnswers.apiKey || '';
       }
-    } else {
-      envContent += `# AI Integration
-OPENAI_API_KEY=
-ANTHROPIC_API_KEY=
-
-`;
     }
 
-    envContent += `# Advanced Settings
-DEBUG=false
-MAX_RETRY_ATTEMPTS=3
-DUPLICATE_THRESHOLD=0.8
-`;
-
-    const envPath = path.join(process.cwd(), '.env');
-    fs.writeFileSync(envPath, envContent);
-
-    console.log(chalk.green('\n✅ Configuration saved to .env file'));
-    console.log(chalk.gray('You can now use the "add" command to add references.'));
+    try {
+      configManager.saveConfig(config);
+      console.log(chalk.green('\n✅ Configuration saved successfully!'));
+      console.log(chalk.gray(`Configuration location: ${configManager.getConfigPath()}`));
+      console.log(chalk.gray('You can now use the "add" command to add references.'));
+      console.log(chalk.blue('\n💡 Tip: Run "anytype-bib test" to verify your connection.'));
+    } catch (error: any) {
+      console.error(chalk.red('❌ Failed to save configuration:'), error.message);
+      process.exit(1);
+    }
   });
 
 program
@@ -348,6 +374,8 @@ Run 'anytype-bib setup' to reconfigure if the test fails.
 `)
   .action(async (options) => {
     try {
+      ensureConfigured();
+      
       if (options.quiet) {
         console.log(chalk.blue('🔍 Testing connection...'));
       } else {
@@ -423,6 +451,8 @@ Search behavior:
 `)
   .action(async (query, options) => {
     try {
+      ensureConfigured();
+      
       const { AnytypeClient } = await import('../anytype/client');
       const client = new AnytypeClient();
 
@@ -502,6 +532,8 @@ JSON format (with --json):
 `)
   .action(async (options) => {
     try {
+      ensureConfigured();
+      
       const { AnytypeClient } = await import('../anytype/client');
       const client = new AnytypeClient();
 

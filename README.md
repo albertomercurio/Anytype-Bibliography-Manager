@@ -26,15 +26,12 @@ Automated bibliography management for Anytype with DOI extraction, BibTeX genera
 git clone https://github.com/yourusername/anytype-bibliography-manager.git
 cd anytype-bibliography-manager
 
-# Install dependencies
-npm install
-
-# Build the TypeScript code
-npm run build
-
-# Install globally for easier access
+# Install globally (recommended)
 npm install -g .
-# or create a symlink for development
+
+# Or for development
+npm install
+npm run build
 npm link
 ```
 
@@ -61,6 +58,8 @@ This will prompt you for:
 - Your Anytype API key
 - Your Space ID (visible in the test output)
 - Optional AI provider configuration
+
+Configuration is stored in `~/.anytype-bib/config.json` and works from any directory.
 
 ### 3. Test the connection
 
@@ -123,24 +122,31 @@ anytype-bib batch dois.txt --auto-resolve
 
 ## Configuration
 
-The `.env` file contains:
+Configuration is stored in `~/.anytype-bib/config.json` and includes:
 
-```env
-# Anytype Configuration
-ANYTYPE_API_KEY=your_key_here
-ANYTYPE_SPACE_ID=your_space_id
-ANYTYPE_HOST=localhost
-ANYTYPE_PORT=31009
-
-# Optional: AI Integration
-OPENAI_API_KEY=
-ANTHROPIC_API_KEY=
-
-# Advanced Settings
-DEBUG=false
-MAX_RETRY_ATTEMPTS=3
-DUPLICATE_THRESHOLD=0.8  # Similarity threshold for duplicate detection
+```json
+{
+  "anytype": {
+    "apiKey": "your_api_key",
+    "spaceId": "your_space_id",
+    "host": "localhost",
+    "port": "31009"
+  },
+  "ai": {
+    "openaiApiKey": "optional",
+    "anthropicApiKey": "optional"
+  },
+  "settings": {
+    "debug": false,
+    "maxRetryAttempts": 3,
+    "duplicateThreshold": 0.8
+  }
+}
 ```
+
+### Migration from .env files
+
+If you have an existing `.env` file, run `anytype-bib setup` and it will offer to migrate your configuration automatically.
 
 ## Development
 
@@ -166,12 +172,20 @@ npm run build
 - Check your API key is correct
 - Run `anytype-bib setup` to reconfigure
 
+### "Configuration not found"
+- Run `anytype-bib setup` to create initial configuration
+- Configuration is stored globally in `~/.anytype-bib/config.json`
+
 ### "Type 'reference' not found"
 - Ensure your space has the Article type configured
 - The tool expects specific type keys (Article, Person, Journal, Book)
 
 ### Duplicate detection too aggressive/loose
-- Adjust `DUPLICATE_THRESHOLD` in `.env` (0.0-1.0, default 0.8)
+- Adjust the duplicate threshold in your configuration:
+  ```bash
+  # Edit ~/.anytype-bib/config.json and change:
+  "duplicateThreshold": 0.8  // 0.0-1.0, default 0.8
+  ```
 
 ## Roadmap
 

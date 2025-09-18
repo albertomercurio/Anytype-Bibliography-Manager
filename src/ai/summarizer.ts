@@ -1,6 +1,4 @@
-import * as dotenv from 'dotenv';
-
-dotenv.config();
+import { ConfigManager } from '../core/config-manager';
 
 export interface AIProvider {
   summarizePDF(pdfPath: string): Promise<string | null>;
@@ -11,9 +9,11 @@ export class OpenAISummarizer implements AIProvider {
   private apiKey: string;
 
   constructor() {
-    this.apiKey = process.env.OPENAI_API_KEY || '';
+    const configManager = new ConfigManager();
+    const config = configManager.getConfig();
+    this.apiKey = config?.ai?.openaiApiKey || '';
     if (!this.apiKey) {
-      throw new Error('OpenAI API key not configured');
+      throw new Error('OpenAI API key not configured. Run "anytype-bib setup" to configure AI integration.');
     }
   }
 
@@ -33,9 +33,11 @@ export class AnthropicSummarizer implements AIProvider {
   private apiKey: string;
 
   constructor() {
-    this.apiKey = process.env.ANTHROPIC_API_KEY || '';
+    const configManager = new ConfigManager();
+    const config = configManager.getConfig();
+    this.apiKey = config?.ai?.anthropicApiKey || '';
     if (!this.apiKey) {
-      throw new Error('Anthropic API key not configured');
+      throw new Error('Anthropic API key not configured. Run "anytype-bib setup" to configure AI integration.');
     }
   }
 
@@ -55,9 +57,12 @@ export class AISummarizer {
   private provider: AIProvider | null = null;
 
   constructor() {
-    if (process.env.OPENAI_API_KEY) {
+    const configManager = new ConfigManager();
+    const config = configManager.getConfig();
+    
+    if (config?.ai?.openaiApiKey) {
       this.provider = new OpenAISummarizer();
-    } else if (process.env.ANTHROPIC_API_KEY) {
+    } else if (config?.ai?.anthropicApiKey) {
       this.provider = new AnthropicSummarizer();
     }
   }
