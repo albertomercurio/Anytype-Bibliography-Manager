@@ -46,28 +46,59 @@ export class AnytypeClient {
   }
 
   async searchByType(typeKey: string, limit = 100): Promise<AnytypeObject[]> {
-    return this.searchObjects([
-      {
-        property: 'type',
-        condition: 'equals',
-        value: typeKey
-      }
-    ], limit);
+    try {
+      const response = await this.client.post(`/spaces/${this.spaceId}/search`, {
+        filters: [
+          {
+            property: 'type',
+            condition: 'equals',
+            value: typeKey
+          }
+        ],
+        limit
+      });
+
+      // Filter results to ensure they actually match the type we want
+      const results = response.data.data || [];
+      return results.filter((obj: any) => obj.type.key === typeKey);
+    } catch (error) {
+      console.error('Error searching by type:', error);
+      return [];
+    }
   }
 
   async searchArticlesByDOI(doi: string): Promise<AnytypeObject[]> {
-    return this.searchObjects([
-      {
-        property: 'type',
-        condition: 'equals',
-        value: 'reference'
-      },
-      {
-        property: 'doi',
-        condition: 'equals',
-        value: doi.toLowerCase()
-      }
-    ]);
+    try {
+      const response = await this.client.post(`/spaces/${this.spaceId}/search`, {
+        filters: [
+          {
+            property: 'type',
+            condition: 'equals',
+            value: 'reference'
+          },
+          {
+            property: 'doi',
+            condition: 'equals',
+            value: doi.toLowerCase()
+          }
+        ]
+      });
+
+      const results = response.data.data || [];
+      // Filter to ensure we only get reference objects with the exact DOI
+      return results.filter((obj: any) => {
+        if (obj.type.key !== 'reference') return false;
+
+        const doiProp = obj.properties?.find((p: any) => p.key === 'doi');
+        if (!doiProp) return false;
+
+        const objDoi = doiProp.text || doiProp.value || '';
+        return objDoi.toLowerCase() === doi.toLowerCase();
+      });
+    } catch (error) {
+      console.error('Error searching articles by DOI:', error);
+      return [];
+    }
   }
 
   async searchPersonsByName(lastName: string, firstName?: string): Promise<AnytypeObject[]> {
@@ -99,33 +130,70 @@ export class AnytypeClient {
   }
 
   async searchPersonsByOrcid(orcid: string): Promise<AnytypeObject[]> {
-    return this.searchObjects([
-      {
-        property: 'type',
-        condition: 'equals',
-        value: 'human'
-      },
-      {
-        property: 'orcid',
-        condition: 'equals',
-        value: orcid
-      }
-    ]);
+    try {
+      const response = await this.client.post(`/spaces/${this.spaceId}/search`, {
+        filters: [
+          {
+            property: 'type',
+            condition: 'equals',
+            value: 'human'
+          },
+          {
+            property: 'orcid',
+            condition: 'equals',
+            value: orcid
+          }
+        ]
+      });
+
+      const results = response.data.data || [];
+      // Filter to ensure we only get person objects with the exact ORCID
+      return results.filter((obj: any) => {
+        if (obj.type.key !== 'human') return false;
+
+        const orcidProp = obj.properties?.find((p: any) => p.key === 'orcid');
+        if (!orcidProp) return false;
+
+        const objOrcid = orcidProp.text || orcidProp.value || '';
+        return objOrcid === orcid;
+      });
+    } catch (error) {
+      console.error('Error searching persons by ORCID:', error);
+      return [];
+    }
   }
 
   async searchJournalsByName(name: string): Promise<AnytypeObject[]> {
-    return this.searchObjects([
-      {
-        property: 'type',
-        condition: 'equals',
-        value: 'journal'
-      },
-      {
-        property: 'name',
-        condition: 'contains',
-        value: name
+    // First try exact match
+    try {
+      const response = await this.client.post(`/spaces/${this.spaceId}/search`, {
+        filters: [
+          {
+            property: 'type',
+            condition: 'equals',
+            value: 'journal'
+          },
+          {
+            property: 'name',
+            condition: 'equals',
+            value: name
+          }
+        ]
+      });
+
+      const exactMatches = response.data.data || [];
+      const filteredExact = exactMatches.filter((obj: any) => obj.type.key === 'journal');
+
+      if (filteredExact.length > 0) {
+        return filteredExact;
       }
-    ]);
+
+      // Then try all journals for similarity checking
+      return this.searchByType('journal');
+    } catch (error) {
+      console.error('Error searching journals by name:', error);
+      return [];
+    }
   }
 
   async createObject(typeKey: string, name: string, properties: Array<{ key: string; [key: string]: any }>): Promise<string | null> {

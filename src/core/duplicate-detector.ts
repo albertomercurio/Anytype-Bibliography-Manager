@@ -138,12 +138,14 @@ export class DuplicateDetector {
         matchReason = 'Similar name';
       }
 
-      if (similarity >= this.threshold || this.areJournalAbbreviations(name, journalName)) {
+      const isAbbreviation = this.areJournalAbbreviations(name, journalName);
+
+      if (similarity >= this.threshold || isAbbreviation) {
         candidates.push({
           object: journal,
-          similarity: similarity === 1.0 ? 1.0 : Math.max(similarity, 0.85),
-          matchType: this.getMatchType(similarity),
-          matchReason
+          similarity: isAbbreviation ? 0.95 : similarity,
+          matchType: isAbbreviation ? 'high' : this.getMatchType(similarity),
+          matchReason: isAbbreviation ? 'Known abbreviation match' : matchReason
         });
       }
     }
@@ -196,21 +198,33 @@ export class DuplicateDetector {
 
   private areJournalAbbreviations(name1: string, name2: string): boolean {
     const commonAbbreviations: Record<string, string[]> = {
-      'physical review letters': ['phys rev lett', 'prl', 'phys. rev. lett.'],
-      'physical review x': ['phys rev x', 'prx', 'phys. rev. x'],
+      'physical review letters': ['phys rev lett', 'prl', 'phys. rev. lett.', 'phys rev lett.'],
+      'physical review x': ['phys rev x', 'prx', 'phys. rev. x', 'phys rev x.'],
+      'physical review a': ['phys rev a', 'pra', 'phys. rev. a', 'physical review a'],
+      'physical review b': ['phys rev b', 'prb', 'phys. rev. b', 'physical review b'],
+      'physical review d': ['phys rev d', 'prd', 'phys. rev. d', 'physical review d'],
+      'physical review e': ['phys rev e', 'pre', 'phys. rev. e', 'physical review e'],
+      'reviews of modern physics': ['rev mod phys', 'rmp', 'rev. mod. phys.'],
       'nature': ['nat', 'nat.'],
       'science': ['sci', 'sci.'],
       'nature physics': ['nat phys', 'nat. phys.', 'nature phys'],
-      'nature communications': ['nat commun', 'nat. commun.', 'nature commun']
+      'nature communications': ['nat commun', 'nat. commun.', 'nature commun', 'nat. communications'],
+      'nature methods': ['nat methods', 'nat. methods', 'nature methods'],
+      'journal of the american chemical society': ['j am chem soc', 'jacs', 'j. am. chem. soc.'],
+      'angewandte chemie': ['angew chem', 'angew. chem.', 'angewandte chemie international edition'],
+      'proceedings of the national academy of sciences': ['proc natl acad sci', 'pnas', 'proc. natl. acad. sci.']
     };
 
-    const n1 = name1.toLowerCase();
-    const n2 = name2.toLowerCase();
+    const n1 = this.normalizeJournalName(name1);
+    const n2 = this.normalizeJournalName(name2);
 
     for (const [full, abbrevs] of Object.entries(commonAbbreviations)) {
-      if ((n1 === full && abbrevs.includes(n2)) ||
-          (n2 === full && abbrevs.includes(n1)) ||
-          (abbrevs.includes(n1) && abbrevs.includes(n2))) {
+      const normalizedFull = this.normalizeJournalName(full);
+      const normalizedAbbrevs = abbrevs.map(a => this.normalizeJournalName(a));
+
+      if ((n1 === normalizedFull && normalizedAbbrevs.includes(n2)) ||
+          (n2 === normalizedFull && normalizedAbbrevs.includes(n1)) ||
+          (normalizedAbbrevs.includes(n1) && normalizedAbbrevs.includes(n2))) {
         return true;
       }
     }
