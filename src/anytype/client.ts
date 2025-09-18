@@ -133,7 +133,8 @@ export class AnytypeClient {
   async searchArticlesByDOI(doi: string): Promise<AnytypeObject[]> {
     try {
       const response = await this.client.post(`/spaces/${this.spaceId}/search`, {
-        types: [this.typeKeys.article]
+        types: [this.typeKeys.article],
+        limit: 1000  // Increase limit to get more results
       });
 
       const results = response.data.data || [];
@@ -153,13 +154,121 @@ export class AnytypeClient {
 
   async searchPersonsByName(lastName: string, firstName?: string): Promise<AnytypeObject[]> {
     try {
-      const response = await this.client.post(`/spaces/${this.spaceId}/search`, {
-        types: [this.typeKeys.person]
-      });
+      // Helper function to generate accent variations
+      const generateAccentVariations = (text: string): string[] => {
+        const variations = new Set([text]); // Start with original
+        
+        // Add normalized version (no accents)
+        const normalized = text
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase();
+        variations.add(normalized);
+        
+        // Add common accent variations for specific characters
+        const accentMap: { [key: string]: string[] } = {
+          'a': ['a', 'à', 'á', 'â', 'ã', 'ä', 'å'],
+          'e': ['e', 'è', 'é', 'ê', 'ë'],
+          'i': ['i', 'ì', 'í', 'î', 'ï'],
+          'o': ['o', 'ò', 'ó', 'ô', 'õ', 'ö'],
+          'u': ['u', 'ù', 'ú', 'û', 'ü'],
+          'c': ['c', 'ç'],
+          'n': ['n', 'ñ']
+        };
+        
+        // Generate variations by replacing characters
+        let textVariations = [text.toLowerCase()];
+        for (const [base, accents] of Object.entries(accentMap)) {
+          const newVariations: string[] = [];
+          for (const variant of textVariations) {
+            if (variant.includes(base) || accents.some(a => variant.includes(a))) {
+              for (const replacement of accents) {
+                const newVariant = variant.replace(new RegExp(`[${accents.join('')}]`, 'g'), replacement);
+                newVariations.push(newVariant);
+              }
+            }
+          }
+          textVariations = [...textVariations, ...newVariations];
+        }
+        
+        textVariations.forEach(v => variations.add(v));
+        return Array.from(variations);
+      };
 
-      const results = response.data.data || [];
-      // Filter client-side since API property filters don't work
-      return results.filter((obj: any) => {
+      // Try multiple search strategies
+      let allResults: any[] = [];
+      const seenIds = new Set<string>();
+      
+      if (lastName) {
+        // Strategy 1: Search with accent variations of lastName
+        const lastNameVariations = generateAccentVariations(lastName);
+        
+        for (const variation of lastNameVariations) {
+          try {
+            const response = await this.client.post(`/spaces/${this.spaceId}/search`, {
+              types: [this.typeKeys.person],
+              query: variation,
+              limit: 1000
+            });
+            const results = response.data.data || [];
+            
+            // Deduplicate by ID
+            for (const result of results) {
+              if (!seenIds.has(result.id)) {
+                seenIds.add(result.id);
+                allResults.push(result);
+              }
+            }
+          } catch (error) {
+            // Continue with next variation if one fails
+          }
+        }
+        
+        // Strategy 2: If we have firstName, also try searching with firstName
+        if (firstName) {
+          const firstNameVariations = generateAccentVariations(firstName);
+          
+          for (const variation of firstNameVariations) {
+            try {
+              const response = await this.client.post(`/spaces/${this.spaceId}/search`, {
+                types: [this.typeKeys.person],
+                query: variation,
+                limit: 1000
+              });
+              const results = response.data.data || [];
+              
+              // Deduplicate by ID
+              for (const result of results) {
+                if (!seenIds.has(result.id)) {
+                  seenIds.add(result.id);
+                  allResults.push(result);
+                }
+              }
+            } catch (error) {
+              // Continue with next variation if one fails
+            }
+          }
+        }
+      } else {
+        // If no lastName provided, get all persons (fallback)
+        const response = await this.client.post(`/spaces/${this.spaceId}/search`, {
+          types: [this.typeKeys.person],
+          limit: 1000
+        });
+        allResults = response.data.data || [];
+      }
+      
+      // Helper function to normalize text for comparison
+      const normalizeText = (text: string): string => {
+        return text
+          .normalize('NFD') // Decompose accented characters
+          .replace(/[\u0300-\u036f]/g, '') // Remove diacritical marks
+          .toLowerCase()
+          .trim();
+      };
+
+      // Filter results client-side for more precise matching
+      return allResults.filter((obj: any) => {
         if (!lastName) return true;
 
         const lastNameProp = obj.properties?.find((p: any) => p.key === 'last_name');
@@ -171,12 +280,48 @@ export class AnytypeClient {
         // Get the main name field as a fallback
         const mainName = obj.name || '';
 
+        // Normalize names for comparison
+        const normalizedLastName = normalizeText(lastName);
+        const normalizedFirstName = firstName ? normalizeText(firstName) : '';
+        const normalizedMainName = normalizeText(mainName);
+
+        // Helper function to check if names are similar (exact match or one contains the other as a word)
+        const isNameMatch = (searchName: string, storedName: string): boolean => {
+          if (!searchName || !storedName) return false;
+          
+          const normalizedSearch = normalizeText(searchName);
+          const normalizedStored = normalizeText(storedName);
+          
+          // Exact match
+          if (normalizedSearch === normalizedStored) return true;
+          
+          // Check if one is contained as a complete word in the other
+          const searchWords = normalizedSearch.split(/\s+/);
+          const storedWords = normalizedStored.split(/\s+/);
+          
+          // Check if all words in search appear in stored (for searches like "S" matching "Salvatore")
+          const searchInStored = searchWords.every(searchWord => 
+            storedWords.some(storedWord => 
+              storedWord.startsWith(searchWord) || searchWord.startsWith(storedWord)
+            )
+          );
+          
+          // Check if all words in stored appear in search
+          const storedInSearch = storedWords.every(storedWord => 
+            searchWords.some(searchWord => 
+              searchWord.startsWith(storedWord) || storedWord.startsWith(searchWord)
+            )
+          );
+          
+          return searchInStored || storedInSearch;
+        };
+
         // Check if we match based on structured first_name/last_name properties
-        const lastNameMatch = lastNameValue.toLowerCase().includes(lastName.toLowerCase());
+        const lastNameMatch = isNameMatch(lastName, lastNameValue);
         let firstNameMatch = true; // Default to true if no firstName provided
         
         if (firstName && firstNameValue) {
-          firstNameMatch = firstNameValue.toLowerCase().includes(firstName.toLowerCase());
+          firstNameMatch = isNameMatch(firstName, firstNameValue);
         }
 
         // If we have structured data and it matches, return true
@@ -186,11 +331,20 @@ export class AnytypeClient {
 
         // Fallback: check the main name field if structured data is not available or doesn't match
         if (mainName) {
-          const mainNameLower = mainName.toLowerCase();
-          const lastNameInMainName = mainNameLower.includes(lastName.toLowerCase());
+          const fullSearchName = [firstName, lastName].filter(Boolean).join(' ');
+          const mainNameMatch = isNameMatch(fullSearchName, mainName);
+          
+          if (mainNameMatch) return true;
+          
+          // Additional fallback: check if last name appears as a word in main name
+          const lastNameInMainName = normalizedMainName.split(/\s+/).some(word => 
+            word === normalizedLastName || word.startsWith(normalizedLastName) || normalizedLastName.startsWith(word)
+          );
           
           if (firstName) {
-            const firstNameInMainName = mainNameLower.includes(firstName.toLowerCase());
+            const firstNameInMainName = normalizedMainName.split(/\s+/).some(word => 
+              word === normalizedFirstName || word.startsWith(normalizedFirstName) || normalizedFirstName.startsWith(word)
+            );
             return lastNameInMainName && firstNameInMainName;
           }
           
@@ -231,7 +385,8 @@ export class AnytypeClient {
     // Get all journals and filter client-side since API property filters don't work
     try {
       const response = await this.client.post(`/spaces/${this.spaceId}/search`, {
-        types: [this.typeKeys.journal]
+        types: [this.typeKeys.journal],
+        limit: 1000  // Increase limit to get more results
       });
 
       const allJournals = response.data.data || [];

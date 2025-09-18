@@ -122,6 +122,9 @@ Extend `AnytypeClient` with new methods following the pattern:
 async createObject(typeKey: string, properties: any): Promise<AnytypeObject>
 ```
 
+### Check the Anytype API
+Use curl or Postman to explore Anytype's API. Look for documentation at https://developers.anytype.io/docs/reference.
+
 ### Enhancing Duplicate Detection
 Modify similarity thresholds and matching logic in `DuplicateDetector`. Current threshold: 0.8
 

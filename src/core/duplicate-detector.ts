@@ -9,14 +9,31 @@ export interface DuplicateCandidate {
   matchReason: string;
 }
 
+// Helper function to normalize text for comparison (remove accents, punctuation, etc.)
+function normalizeText(text: string): string {
+  return text
+    .normalize('NFD') // Decompose accented characters
+    .replace(/[\u0300-\u036f]/g, '') // Remove diacritical marks
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ') // Replace punctuation with spaces
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .trim();
+}
+
 // Helper function to calculate similarity between two strings (0-1)
 function compareStrings(str1: string, str2: string): number {
   if (str1 === str2) return 1.0;
   if (str1.length === 0 && str2.length === 0) return 1.0;
   if (str1.length === 0 || str2.length === 0) return 0.0;
   
+  // First try normalized comparison
+  const norm1 = normalizeText(str1);
+  const norm2 = normalizeText(str2);
+  
+  if (norm1 === norm2) return 1.0; // Perfect match for normalized text (same semantic meaning)
+  
   const maxLength = Math.max(str1.length, str2.length);
-  const editDistance = distance(str1, str2);
+  const editDistance = distance(norm1, norm2);
   return 1 - (editDistance / maxLength);
 }
 
@@ -134,7 +151,11 @@ export class DuplicateDetector {
         }
       }
 
-      if (similarity >= this.threshold * 0.8) {
+      // For person matching, use a lower threshold to catch more potential matches
+      // since names can have variations, abbreviations, etc.
+      const personThreshold = Math.min(this.threshold * 0.7, 0.6);
+      
+      if (similarity >= personThreshold) {
         candidates.push({
           object: person,
           similarity,
@@ -163,17 +184,19 @@ export class DuplicateDetector {
       );
 
       let matchReason = '';
+      let isAbbreviation = false;
+      
       if (similarity === 1.0) {
         matchReason = 'Exact name match';
+        isAbbreviation = false; // Exact match takes precedence over abbreviation
       } else if (this.areJournalAbbreviations(name, journalName)) {
-        matchReason = 'Possible abbreviation match';
+        matchReason = 'Known abbreviation match';
+        isAbbreviation = true;
       } else if (similarity >= 0.9) {
         matchReason = 'Very similar name';
       } else if (similarity >= this.threshold) {
         matchReason = 'Similar name';
       }
-
-      const isAbbreviation = this.areJournalAbbreviations(name, journalName);
 
       if (similarity >= this.threshold || isAbbreviation) {
         candidates.push({
@@ -189,8 +212,8 @@ export class DuplicateDetector {
   }
 
   private compareFirstNames(name1: string, name2: string): number {
-    const n1 = name1.toLowerCase().trim();
-    const n2 = name2.toLowerCase().trim();
+    const n1 = normalizeText(name1);
+    const n2 = normalizeText(name2);
 
     if (n1 === n2) return 1.0;
 
@@ -198,22 +221,27 @@ export class DuplicateDetector {
       return 0.85;
     }
 
-    return compareStrings(n1, n2);
+    return compareStrings(name1, name2);
   }
 
   private isAbbreviation(abbr: string, full: string): boolean {
-    if (abbr.length > full.length) return false;
+    // Normalize both strings for comparison
+    const normAbbr = normalizeText(abbr);
+    const normFull = normalizeText(full);
+    
+    if (normAbbr.length > normFull.length) return false;
 
-    if (abbr.endsWith('.')) {
-      abbr = abbr.slice(0, -1);
+    let checkAbbr = normAbbr;
+    if (checkAbbr.endsWith('.')) {
+      checkAbbr = checkAbbr.slice(0, -1);
     }
 
-    if (abbr.length === 1) {
-      return full.startsWith(abbr);
+    if (checkAbbr.length === 1) {
+      return normFull.startsWith(checkAbbr);
     }
 
-    const abbrParts = abbr.split(/[\s.-]+/);
-    const fullParts = full.split(/[\s-]+/);
+    const abbrParts = checkAbbr.split(/[\s.-]+/);
+    const fullParts = normFull.split(/[\s-]+/);
 
     if (abbrParts.length > fullParts.length) return false;
 
@@ -274,10 +302,27 @@ export class DuplicateDetector {
       return { firstName: '', lastName: '' };
     } else if (parts.length === 1) {
       return { firstName: '', lastName: parts[0] };
+    } else if (parts.length === 2) {
+      return { firstName: parts[0], lastName: parts[1] };
     } else {
-      // Assume last part is the last name, everything else is first name
-      const lastName = parts[parts.length - 1];
-      const firstName = parts.slice(0, -1).join(' ');
+      // For 3+ parts, use heuristics to identify compound last names
+      // Common patterns: "Di", "De", "Van", "Von", "Del", "Da", "La", "Le", etc.
+      const lastNamePrefixes = new Set(['di', 'de', 'van', 'von', 'del', 'da', 'la', 'le', 'el', 'al', 'bin', 'ibn', 'mac', 'mc', 'o', 'san', 'santa']);
+      
+      // Find the start of the last name (look for prefixes)
+      let lastNameStartIndex = parts.length - 1;
+      
+      for (let i = parts.length - 2; i >= 1; i--) {
+        const part = parts[i].toLowerCase();
+        if (lastNamePrefixes.has(part) || part.endsWith('.')) {
+          lastNameStartIndex = i;
+        } else {
+          break;
+        }
+      }
+      
+      const lastName = parts.slice(lastNameStartIndex).join(' ');
+      const firstName = parts.slice(0, lastNameStartIndex).join(' ');
       return { firstName, lastName };
     }
   }

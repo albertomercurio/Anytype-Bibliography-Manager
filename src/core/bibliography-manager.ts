@@ -125,8 +125,20 @@ export class BibliographyManager {
     for (const author of authors) {
       console.log(chalk.blue(`\n👤 Processing author: ${author.fullName}`));
 
-      const lastName = author.familyName || author.fullName.split(' ').pop() || '';
-      const firstName = author.givenName;
+      // Use provided familyName/givenName, or parse the full name with better logic
+      let lastName = author.familyName;
+      let firstName = author.givenName;
+
+      if (!lastName || !firstName) {
+        const parsed = this.parseAuthorName(author.fullName);
+        lastName = lastName || parsed.lastName;
+        firstName = firstName || parsed.firstName;
+      }
+
+      // Ensure we have at least a last name
+      if (!lastName) {
+        lastName = author.fullName || 'Unknown';
+      }
 
       // Check for duplicates
       const duplicates = await this.duplicateDetector.checkPersonDuplicate(
@@ -137,34 +149,47 @@ export class BibliographyManager {
 
       let personId: string | null = null;
 
-      if (duplicates.length > 0 && !options.autoResolveAuthors) {
-        console.log(chalk.yellow('  Possible duplicates found:'));
+      if (duplicates.length > 0) {
+        const bestMatch = duplicates[0]; // Already sorted by similarity
 
-        const choices = [
-          ...duplicates.slice(0, 5).map((dup) => ({
-            name: `${dup.object.name} (${dup.matchReason}, ${Math.round(dup.similarity * 100)}% match)`,
-            value: dup.object.id
-          })),
-          { name: 'Create new author', value: 'new' },
-          { name: 'Skip this author', value: 'skip' }
-        ];
+        if (options.autoResolveAuthors) {
+          // Auto-resolve: use the best match if it's high confidence
+          if (bestMatch.matchType === 'exact' || bestMatch.similarity >= 0.9) {
+            personId = bestMatch.object.id;
+            console.log(chalk.gray(`  Using existing author (${bestMatch.matchReason}): ${bestMatch.object.name}`));
+          } else if (bestMatch.similarity >= 0.8) {
+            // Medium confidence matches - still use but with a note
+            personId = bestMatch.object.id;
+            console.log(chalk.yellow(`  Using existing author (${Math.round(bestMatch.similarity * 100)}% match): ${bestMatch.object.name}`));
+          }
+          // If similarity < 0.8, create new author (fall through to creation)
+        } else {
+          // Interactive mode: prompt user for decision
+          console.log(chalk.yellow('  Possible duplicates found:'));
 
-        const { action } = await inquirer.prompt([{
-          type: 'list',
-          name: 'action',
-          message: 'Select an option:',
-          choices
-        }]);
+          const choices = [
+            ...duplicates.slice(0, 5).map((dup) => ({
+              name: `${dup.object.name} (${dup.matchReason}, ${Math.round(dup.similarity * 100)}% match)`,
+              value: dup.object.id
+            })),
+            { name: 'Create new author', value: 'new' },
+            { name: 'Skip this author', value: 'skip' }
+          ];
 
-        if (action === 'skip') {
-          continue;
-        } else if (action !== 'new') {
-          personId = action;
-          console.log(chalk.gray(`  Using existing author: ${duplicates.find(d => d.object.id === action)?.object.name}`));
+          const { action } = await inquirer.prompt([{
+            type: 'list',
+            name: 'action',
+            message: 'Select an option:',
+            choices
+          }]);
+
+          if (action === 'skip') {
+            continue;
+          } else if (action !== 'new') {
+            personId = action;
+            console.log(chalk.gray(`  Using existing author: ${duplicates.find(d => d.object.id === action)?.object.name}`));
+          }
         }
-      } else if (duplicates.length > 0 && duplicates[0].matchType === 'exact') {
-        personId = duplicates[0].object.id;
-        console.log(chalk.gray(`  Using existing author (exact match): ${duplicates[0].object.name}`));
       }
 
       // Create new author if needed
@@ -196,34 +221,47 @@ export class BibliographyManager {
     // Check for duplicates
     const duplicates = await this.duplicateDetector.checkJournalDuplicate(journalName);
 
-    if (duplicates.length > 0 && !options.autoResolveJournals) {
-      console.log(chalk.yellow('  Possible duplicates found:'));
+    if (duplicates.length > 0) {
+      const bestMatch = duplicates[0]; // Already sorted by similarity
 
-      const choices = [
-        ...duplicates.slice(0, 5).map((dup) => ({
-          name: `${dup.object.name} (${dup.matchReason}, ${Math.round(dup.similarity * 100)}% match)`,
-          value: dup.object.id
-        })),
-        { name: 'Create new journal', value: 'new' },
-        { name: 'Skip journal', value: 'skip' }
-      ];
+      if (options.autoResolveJournals) {
+        // Auto-resolve: use the best match if it's high confidence
+        if (bestMatch.matchType === 'exact' || bestMatch.similarity >= 0.9) {
+          console.log(chalk.gray(`  Using existing journal (${bestMatch.matchReason}): ${bestMatch.object.name}`));
+          return bestMatch.object.id;
+        } else if (bestMatch.similarity >= 0.8) {
+          // Medium confidence matches - still use but with a note
+          console.log(chalk.yellow(`  Using existing journal (${Math.round(bestMatch.similarity * 100)}% match): ${bestMatch.object.name}`));
+          return bestMatch.object.id;
+        }
+        // If similarity < 0.8, create new journal (fall through to creation)
+      } else {
+        // Interactive mode: prompt user for decision
+        console.log(chalk.yellow('  Possible duplicates found:'));
 
-      const { action } = await inquirer.prompt([{
-        type: 'list',
-        name: 'action',
-        message: 'Select an option:',
-        choices
-      }]);
+        const choices = [
+          ...duplicates.slice(0, 5).map((dup) => ({
+            name: `${dup.object.name} (${dup.matchReason}, ${Math.round(dup.similarity * 100)}% match)`,
+            value: dup.object.id
+          })),
+          { name: 'Create new journal', value: 'new' },
+          { name: 'Skip journal', value: 'skip' }
+        ];
 
-      if (action === 'skip') {
-        return undefined;
-      } else if (action !== 'new') {
-        console.log(chalk.gray(`  Using existing journal: ${duplicates.find(d => d.object.id === action)?.object.name}`));
-        return action;
+        const { action } = await inquirer.prompt([{
+          type: 'list',
+          name: 'action',
+          message: 'Select an option:',
+          choices
+        }]);
+
+        if (action === 'skip') {
+          return undefined;
+        } else if (action !== 'new') {
+          console.log(chalk.gray(`  Using existing journal: ${duplicates.find(d => d.object.id === action)?.object.name}`));
+          return action;
+        }
       }
-    } else if (duplicates.length > 0 && duplicates[0].matchType === 'exact') {
-      console.log(chalk.gray(`  Using existing journal (exact match): ${duplicates[0].object.name}`));
-      return duplicates[0].object.id;
     }
 
     // Create new journal
@@ -235,6 +273,38 @@ export class BibliographyManager {
     } else {
       console.log(chalk.red(`  ✗ Failed to create journal: ${journalName}`));
       return undefined;
+    }
+  }
+
+  private parseAuthorName(fullName: string): { firstName: string; lastName: string } {
+    const parts = fullName.trim().split(/\s+/);
+    
+    if (parts.length === 0) {
+      return { firstName: '', lastName: '' };
+    } else if (parts.length === 1) {
+      return { firstName: '', lastName: parts[0] };
+    } else if (parts.length === 2) {
+      return { firstName: parts[0], lastName: parts[1] };
+    } else {
+      // For 3+ parts, use heuristics to identify compound last names
+      // Common patterns: "Di", "De", "Van", "Von", "Del", "Da", "La", "Le", etc.
+      const lastNamePrefixes = new Set(['di', 'de', 'van', 'von', 'del', 'da', 'la', 'le', 'el', 'al', 'bin', 'ibn', 'mac', 'mc', 'o', 'san', 'santa']);
+      
+      // Find the start of the last name (look for prefixes)
+      let lastNameStartIndex = parts.length - 1;
+      
+      for (let i = parts.length - 2; i >= 1; i--) {
+        const part = parts[i].toLowerCase();
+        if (lastNamePrefixes.has(part) || part.endsWith('.')) {
+          lastNameStartIndex = i;
+        } else {
+          break;
+        }
+      }
+      
+      const lastName = parts.slice(lastNameStartIndex).join(' ');
+      const firstName = parts.slice(0, lastNameStartIndex).join(' ');
+      return { firstName, lastName };
     }
   }
 }
