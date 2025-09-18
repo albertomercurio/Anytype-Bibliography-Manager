@@ -9,6 +9,12 @@ export interface Config {
     host: string;
     port: string;
   };
+  typeKeys?: {
+    article?: string;
+    person?: string;
+    journal?: string;
+    book?: string;
+  };
   ai?: {
     openaiApiKey?: string;
     anthropicApiKey?: string;
@@ -93,6 +99,12 @@ export class ConfigManager {
         spaceId: '',
         host: 'localhost',
         port: '31009'
+      },
+      typeKeys: {
+        article: 'reference',
+        person: 'human',
+        journal: 'journal',
+        book: 'book'
       },
       ai: {
         openaiApiKey: '',

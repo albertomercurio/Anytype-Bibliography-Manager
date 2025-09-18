@@ -327,9 +327,62 @@ Troubleshooting:
     }
 
     try {
+      // First save the basic config to enable API connection
       configManager.saveConfig(config);
-      console.log(chalk.green('\n✅ Configuration saved successfully!'));
-      console.log(chalk.gray(`Configuration location: ${configManager.getConfigPath()}`));
+      console.log(chalk.green('\n✅ Basic configuration saved!'));
+
+      // Now try to discover object types
+      console.log(chalk.blue('🔍 Discovering object types in your Anytype space...'));
+      
+      try {
+        const { AnytypeClient } = await import('../anytype/client');
+        const client = new AnytypeClient();
+        const discoveredTypes = await client.discoverObjectTypes();
+
+        if (Object.keys(discoveredTypes).length > 0) {
+          console.log(chalk.green('✓ Found object types:'));
+          
+          const typeKeys: { [key: string]: string } = {};
+          const requiredTypes = ['article', 'person', 'journal', 'book'];
+          const missingTypes: string[] = [];
+
+          for (const requiredType of requiredTypes) {
+            if (discoveredTypes[requiredType]) {
+              typeKeys[requiredType] = discoveredTypes[requiredType];
+              console.log(chalk.gray(`  ${requiredType}: ${discoveredTypes[requiredType]}`));
+            } else {
+              missingTypes.push(requiredType);
+            }
+          }
+
+          if (missingTypes.length > 0) {
+            console.log(chalk.yellow(`\n⚠️  Could not find these object types: ${missingTypes.join(', ')}`));
+            console.log(chalk.yellow('Using default type keys. You may need to create these object types in your Anytype space.'));
+            
+            // Add default keys for missing types
+            const defaults = { article: 'reference', person: 'human', journal: 'journal', book: 'book' };
+            for (const missing of missingTypes) {
+              typeKeys[missing] = defaults[missing as keyof typeof defaults];
+            }
+          }
+
+          // Update config with discovered type keys
+          const finalConfig = { ...config, typeKeys };
+          configManager.saveConfig(finalConfig);
+          console.log(chalk.green('✅ Object type discovery complete!'));
+        } else {
+          console.log(chalk.yellow('⚠️  Could not discover object types. Using defaults.'));
+          const finalConfig = { ...config, typeKeys: { article: 'reference', person: 'human', journal: 'journal', book: 'book' } };
+          configManager.saveConfig(finalConfig);
+        }
+      } catch (typeError) {
+        console.log(chalk.yellow('⚠️  Could not discover object types (API connection issue). Using defaults.'));
+        console.log(chalk.gray('You can run setup again later to rediscover types.'));
+        const finalConfig = { ...config, typeKeys: { article: 'reference', person: 'human', journal: 'journal', book: 'book' } };
+        configManager.saveConfig(finalConfig);
+      }
+
+      console.log(chalk.gray(`\nConfiguration location: ${configManager.getConfigPath()}`));
       console.log(chalk.gray('You can now use the "add" command to add references.'));
       console.log(chalk.blue('\n💡 Tip: Run "anytype-bib test" to verify your connection.'));
     } catch (error: any) {
@@ -384,17 +437,18 @@ Run 'anytype-bib setup' to reconfigure if the test fails.
 
       const { AnytypeClient } = await import('../anytype/client');
       const client = new AnytypeClient();
+      const typeKeys = client.getTypeKeys();
 
       // Test search
-      const objects = await client.searchByType('reference');
+      const objects = await client.searchByType(typeKeys.article);
       console.log(chalk.green('✓ API connection successful'));
       console.log(`  Found ${objects.length} articles in your space`);
 
       if (!options.quiet) {
         // Show some stats
-        const persons = await client.searchByType('human');
-        const journals = await client.searchByType('journal');
-        const books = await client.searchByType('book');
+        const persons = await client.searchByType(typeKeys.person);
+        const journals = await client.searchByType(typeKeys.journal);
+        const books = await client.searchByType(typeKeys.book);
 
         console.log(chalk.blue('\n📊 Space statistics:'));
         console.log(`  Articles: ${objects.length}`);
@@ -455,15 +509,16 @@ Search behavior:
       
       const { AnytypeClient } = await import('../anytype/client');
       const client = new AnytypeClient();
+      const typeKeys = client.getTypeKeys();
 
       const typeMap: { [key: string]: string } = {
-        'article': 'reference',
-        'author': 'human',
-        'journal': 'journal',
-        'book': 'book'
+        'article': typeKeys.article,
+        'author': typeKeys.person,
+        'journal': typeKeys.journal,
+        'book': typeKeys.book
       };
 
-      const typeKey = typeMap[options.type] || 'reference';
+      const typeKey = typeMap[options.type] || typeKeys.article;
       const limit = parseInt(options.limit) || 10;
 
       console.log(chalk.blue(`🔍 Searching for ${options.type}s...`));
@@ -536,14 +591,15 @@ JSON format (with --json):
       
       const { AnytypeClient } = await import('../anytype/client');
       const client = new AnytypeClient();
+      const typeKeys = client.getTypeKeys();
 
       console.log(chalk.blue('📊 Gathering bibliography statistics...\n'));
 
       const [articles, authors, journals, books] = await Promise.all([
-        client.searchByType('reference'),
-        client.searchByType('human'),
-        client.searchByType('journal'),
-        client.searchByType('book')
+        client.searchByType(typeKeys.article),
+        client.searchByType(typeKeys.person),
+        client.searchByType(typeKeys.journal),
+        client.searchByType(typeKeys.book)
       ]);
 
       const stats = {

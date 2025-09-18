@@ -17,7 +17,7 @@ Automated bibliography management for Anytype with DOI extraction, BibTeX genera
 - Node.js 18+ and npm
 - Anytype desktop app (v0.46.7+)
 - Active Anytype account with API access
-- A Research space configured with Article, Person, Journal, and Book types
+- A Research space with object types for articles, people, journals, and books (the tool will automatically discover these during setup)
 
 ## Installation
 
@@ -58,6 +58,8 @@ This will prompt you for:
 - Your Anytype API key
 - Your Space ID (visible in the test output)
 - Optional AI provider configuration
+
+The setup process will also automatically discover the object types in your Anytype space that correspond to articles, people, journals, and books. If the tool can't find the appropriate object types, you may need to create them in your Anytype space.
 
 Configuration is stored in `~/.anytype-bib/config.json` and works from any directory.
 
@@ -132,6 +134,12 @@ Configuration is stored in `~/.anytype-bib/config.json` and includes:
     "host": "localhost",
     "port": "31009"
   },
+  "typeKeys": {
+    "article": "reference",
+    "person": "human", 
+    "journal": "journal",
+    "book": "book"
+  },
   "ai": {
     "openaiApiKey": "optional",
     "anthropicApiKey": "optional"
@@ -143,6 +151,8 @@ Configuration is stored in `~/.anytype-bib/config.json` and includes:
   }
 }
 ```
+
+The `typeKeys` section is automatically populated during setup by discovering the object types in your Anytype space. The tool looks for object types with names like "Article", "Person", "Author", "Journal", "Book", etc., and maps them to the appropriate functions.
 
 ### Migration from .env files
 
@@ -177,8 +187,10 @@ npm run build
 - Configuration is stored globally in `~/.anytype-bib/config.json`
 
 ### "Type 'reference' not found"
-- Ensure your space has the Article type configured
-- The tool expects specific type keys (Article, Person, Journal, Book)
+- Ensure your space has object types for articles, people, journals, and books
+- Run `anytype-bib setup` again to rediscover object types in your space
+- The tool automatically detects object types with names like "Article", "Person", "Journal", "Book", etc.
+- If you have custom names, the tool will try to match them intelligently during setup
 
 ### Duplicate detection too aggressive/loose
 - Adjust the duplicate threshold in your configuration:
@@ -195,7 +207,3 @@ npm run build
 - [ ] Export bibliography to various formats
 - [ ] Web interface
 - [ ] Mobile app support
-
-## License
-
-MIT

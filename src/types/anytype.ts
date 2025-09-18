@@ -83,10 +83,3 @@ export interface Book {
   pdfs?: string[];
   tags?: string[];
 }
-
-export const ANYTYPE_TYPES = {
-  ARTICLE: 'bafyreic6dye5yim2yuwyemghaxx3w444div2ezmwzp6y3t6zfxi2efq7ta',
-  PERSON: 'bafyreia2ovxa3kagky35fvasvawz72d54u3oxylpnyhkzcytbytatd7b2u',
-  JOURNAL: 'bafyreiaok4bz5vryofztkd4u4dchyalkdc2qutzkgeffhrfshwfnb23ism',
-  BOOK: 'bafyreiab4o7panfzx3sy7tzbt7q4y2sggliuekxq5kek7wgadbpsunrske'
-} as const;

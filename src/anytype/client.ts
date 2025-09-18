@@ -5,6 +5,12 @@ import { ConfigManager } from '../core/config-manager';
 export class AnytypeClient {
   private client: AxiosInstance;
   private spaceId: string;
+  private typeKeys: {
+    article: string;
+    person: string;
+    journal: string;
+    book: string;
+  };
 
   constructor() {
     const configManager = new ConfigManager();
@@ -26,6 +32,14 @@ export class AnytypeClient {
 
     this.spaceId = spaceId;
 
+    // Use type keys from config, fallback to defaults
+    this.typeKeys = {
+      article: config.typeKeys?.article || 'reference',
+      person: config.typeKeys?.person || 'human',
+      journal: config.typeKeys?.journal || 'journal',
+      book: config.typeKeys?.book || 'book'
+    };
+
     this.client = axios.create({
       baseURL: `http://${host}:${port}/v1`,
       headers: {
@@ -34,6 +48,10 @@ export class AnytypeClient {
         'Anytype-Version': '2025-05-20'
       }
     });
+  }
+
+  getTypeKeys() {
+    return this.typeKeys;
   }
 
   async searchObjects(filters: any[], limit = 100, offset = 0): Promise<AnytypeObject[]> {
@@ -69,10 +87,53 @@ export class AnytypeClient {
     }
   }
 
+  async discoverObjectTypes(): Promise<{ [typeName: string]: string }> {
+    try {
+      // Get all object types available in the space
+      const response = await this.client.get(`/spaces/${this.spaceId}/types`);
+      const types = response.data.data || [];
+
+      const typeMap: { [typeName: string]: string } = {};
+      const targetTypes = ['article', 'person', 'journal', 'book', 'human'];
+
+      for (const type of types) {
+        const typeName = type.name?.toLowerCase();
+        const typeKey = type.key;
+
+        if (!typeName || !typeKey) continue;
+
+        // Map common variations to our expected names
+        if (typeName.includes('article') || typeName.includes('paper') || typeName.includes('reference')) {
+          typeMap['article'] = typeKey;
+        } else if (typeName.includes('person') || typeName.includes('author') || typeName.includes('human') || typeName.includes('people')) {
+          typeMap['person'] = typeKey;
+        } else if (typeName.includes('journal') || typeName.includes('publication')) {
+          typeMap['journal'] = typeKey;
+        } else if (typeName.includes('book')) {
+          typeMap['book'] = typeKey;
+        }
+
+        // Also check for exact matches with our target types
+        if (targetTypes.includes(typeName)) {
+          if (typeName === 'human') {
+            typeMap['person'] = typeKey;
+          } else {
+            typeMap[typeName] = typeKey;
+          }
+        }
+      }
+
+      return typeMap;
+    } catch (error) {
+      console.error('Error discovering object types:', error);
+      return {};
+    }
+  }
+
   async searchArticlesByDOI(doi: string): Promise<AnytypeObject[]> {
     try {
       const response = await this.client.post(`/spaces/${this.spaceId}/search`, {
-        types: ['reference']
+        types: [this.typeKeys.article]
       });
 
       const results = response.data.data || [];
@@ -93,7 +154,7 @@ export class AnytypeClient {
   async searchPersonsByName(lastName: string, firstName?: string): Promise<AnytypeObject[]> {
     try {
       const response = await this.client.post(`/spaces/${this.spaceId}/search`, {
-        types: ['human']
+        types: [this.typeKeys.person]
       });
 
       const results = response.data.data || [];
@@ -148,7 +209,7 @@ export class AnytypeClient {
   async searchPersonsByOrcid(orcid: string): Promise<AnytypeObject[]> {
     try {
       const response = await this.client.post(`/spaces/${this.spaceId}/search`, {
-        types: ['human']
+        types: [this.typeKeys.person]
       });
 
       const results = response.data.data || [];
@@ -170,7 +231,7 @@ export class AnytypeClient {
     // Get all journals and filter client-side since API property filters don't work
     try {
       const response = await this.client.post(`/spaces/${this.spaceId}/search`, {
-        types: ['journal']
+        types: [this.typeKeys.journal]
       });
 
       const allJournals = response.data.data || [];
@@ -253,7 +314,7 @@ export class AnytypeClient {
       properties.push({ key: 'bib_te_x', text: article.bibtex });
     }
 
-    return this.createObject('reference', article.title, properties);
+    return this.createObject(this.typeKeys.article, article.title, properties);
   }
 
   async createPerson(person: {
@@ -278,11 +339,11 @@ export class AnytypeClient {
       properties.push({ key: 'email', email: person.email });
     }
 
-    return this.createObject('human', name, properties);
+    return this.createObject(this.typeKeys.person, name, properties);
   }
 
   async createJournal(name: string): Promise<string | null> {
-    return this.createObject('journal', name, []);
+    return this.createObject(this.typeKeys.journal, name, []);
   }
 
   async createBook(book: {
@@ -303,6 +364,6 @@ export class AnytypeClient {
       properties.push({ key: 'bib_te_x', text: book.bibtex });
     }
 
-    return this.createObject('book', book.title, properties);
+    return this.createObject(this.typeKeys.book, book.title, properties);
   }
 }
