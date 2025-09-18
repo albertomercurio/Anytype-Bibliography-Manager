@@ -32,11 +32,12 @@ export class AnytypeClient {
     });
   }
 
-  async searchObjects(filters: any[], limit = 100): Promise<AnytypeObject[]> {
+  async searchObjects(filters: any[], limit = 100, offset = 0): Promise<AnytypeObject[]> {
     try {
       const response = await this.client.post(`/spaces/${this.spaceId}/search`, {
         filters,
-        limit
+        limit,
+        offset
       });
       return response.data.data || [];
     } catch (error) {
@@ -45,11 +46,16 @@ export class AnytypeClient {
     }
   }
 
-  async searchByType(typeKey: string, limit = 100): Promise<AnytypeObject[]> {
+  async searchByType(typeKey: string, limit = 100, offset = 0): Promise<AnytypeObject[]> {
     try {
       const response = await this.client.post(`/spaces/${this.spaceId}/search`, {
         types: [typeKey],
-        limit
+        limit,
+        offset,
+        sort: {
+          property_key: 'last_modified_date',
+          direction: 'desc'
+        }
       });
 
       return response.data.data || [];
