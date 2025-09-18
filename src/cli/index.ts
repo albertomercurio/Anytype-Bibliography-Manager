@@ -375,7 +375,7 @@ Troubleshooting:
           const finalConfig = { ...config, typeKeys: { article: 'reference', person: 'human', journal: 'journal', book: 'book' } };
           configManager.saveConfig(finalConfig);
         }
-      } catch (typeError) {
+      } catch {
         console.log(chalk.yellow('⚠️  Could not discover object types (API connection issue). Using defaults.'));
         console.log(chalk.gray('You can run setup again later to rediscover types.'));
         const finalConfig = { ...config, typeKeys: { article: 'reference', person: 'human', journal: 'journal', book: 'book' } };

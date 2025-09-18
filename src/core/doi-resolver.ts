@@ -11,14 +11,14 @@ export class DOIResolver {
     try {
       const metadata = await this.fetchFromCrossref(cleanDoi);
       if (metadata) return metadata;
-    } catch (error) {
+    } catch {
       console.log(`CrossRef lookup failed for ${cleanDoi}, trying DataCite...`);
     }
 
     try {
       const metadata = await this.fetchFromDataCite(cleanDoi);
       if (metadata) return metadata;
-    } catch (error) {
+    } catch {
       console.error(`All DOI lookups failed for ${cleanDoi}`);
     }
 

@@ -1,4 +1,4 @@
-import * as stringSimilarity from 'string-similarity';
+import { distance } from 'fastest-levenshtein';
 import { AnytypeObject } from '../types/anytype';
 import { AnytypeClient } from '../anytype/client';
 
@@ -7,6 +7,17 @@ export interface DuplicateCandidate {
   similarity: number;
   matchType: 'exact' | 'high' | 'medium' | 'low';
   matchReason: string;
+}
+
+// Helper function to calculate similarity between two strings (0-1)
+function compareStrings(str1: string, str2: string): number {
+  if (str1 === str2) return 1.0;
+  if (str1.length === 0 && str2.length === 0) return 1.0;
+  if (str1.length === 0 || str2.length === 0) return 0.0;
+  
+  const maxLength = Math.max(str1.length, str2.length);
+  const editDistance = distance(str1, str2);
+  return 1 - (editDistance / maxLength);
 }
 
 export class DuplicateDetector {
@@ -64,7 +75,7 @@ export class DuplicateDetector {
 
       // First, try to match using structured first_name/last_name properties
       if (lastName && personLastName) {
-        const lastNameSimilarity = stringSimilarity.compareTwoStrings(
+        const lastNameSimilarity = compareStrings(
           lastName.toLowerCase(),
           personLastName.toLowerCase()
         );
@@ -91,7 +102,7 @@ export class DuplicateDetector {
       // Fallback: check full name similarity (important for objects with only main name field)
       const fullName = [firstName, lastName].filter(Boolean).join(' ');
       if (fullName && personName) {
-        const fullNameSimilarity = stringSimilarity.compareTwoStrings(
+        const fullNameSimilarity = compareStrings(
           fullName.toLowerCase(),
           personName.toLowerCase()
         );
@@ -105,7 +116,7 @@ export class DuplicateDetector {
       if (similarity === 0 && personName && (!personFirstName && !personLastName)) {
         const parsedName = this.parseFullName(personName);
         if (parsedName.lastName && lastName) {
-          const lastNameSim = stringSimilarity.compareTwoStrings(
+          const lastNameSim = compareStrings(
             lastName.toLowerCase(),
             parsedName.lastName.toLowerCase()
           );
@@ -146,7 +157,7 @@ export class DuplicateDetector {
       const journalName = journal.name || '';
       const normalizedJournal = this.normalizeJournalName(journalName);
 
-      const similarity = stringSimilarity.compareTwoStrings(
+      const similarity = compareStrings(
         normalizedInput,
         normalizedJournal
       );
@@ -187,7 +198,7 @@ export class DuplicateDetector {
       return 0.85;
     }
 
-    return stringSimilarity.compareTwoStrings(n1, n2);
+    return compareStrings(n1, n2);
   }
 
   private isAbbreviation(abbr: string, full: string): boolean {
