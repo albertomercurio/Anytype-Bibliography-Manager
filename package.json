@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Automated bibliography management for Anytype with DOI extraction and BibTeX generation",
   "main": "dist/cli/index.js",
+  "bin": {
+    "anytype-bib": "./dist/cli/index.js"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsx watch src/cli/index.ts",

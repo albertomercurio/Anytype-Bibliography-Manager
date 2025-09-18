@@ -32,9 +32,13 @@ npm install
 # Build the TypeScript code
 npm run build
 
-# Make the CLI globally available (optional)
+# Install globally for easier access
+npm install -g .
+# or create a symlink for development
 npm link
 ```
+
+After installation, you can use `anytype-bib` from anywhere in your terminal instead of `npx tsx src/cli/index.ts`.
 
 ## Setup
 
@@ -50,8 +54,6 @@ npm link
 Run the setup command:
 
 ```bash
-npx tsx src/cli/index.ts setup
-# or if installed globally:
 anytype-bib setup
 ```
 
@@ -63,7 +65,7 @@ This will prompt you for:
 ### 3. Test the connection
 
 ```bash
-npx tsx src/cli/index.ts test
+anytype-bib test
 ```
 
 ## Usage
@@ -72,13 +74,13 @@ npx tsx src/cli/index.ts test
 
 ```bash
 # Interactive mode
-npx tsx src/cli/index.ts add
+anytype-bib add
 
 # With DOI directly
-npx tsx src/cli/index.ts add "10.1103/PhysRevLett.130.213604"
+anytype-bib add "10.1103/PhysRevLett.130.213604"
 
 # With options
-npx tsx src/cli/index.ts add "10.1103/PhysRevLett.130.213604" --auto-resolve --pdf paper.pdf
+anytype-bib add "10.1103/PhysRevLett.130.213604" --auto-resolve --pdf paper.pdf
 ```
 
 ### Batch import
@@ -94,7 +96,7 @@ Create a file with DOIs (one per line):
 Then run:
 
 ```bash
-npx tsx src/cli/index.ts batch dois.txt --auto-resolve
+anytype-bib batch dois.txt --auto-resolve
 ```
 
 ### Command Options
