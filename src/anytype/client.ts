@@ -103,17 +103,41 @@ export class AnytypeClient {
 
         const lastNameProp = obj.properties?.find((p: any) => p.key === 'last_name');
         const lastNameValue = lastNameProp?.text || lastNameProp?.value || '';
+        
+        const firstNameProp = obj.properties?.find((p: any) => p.key === 'first_name');
+        const firstNameValue = firstNameProp?.text || firstNameProp?.value || '';
+        
+        // Get the main name field as a fallback
+        const mainName = obj.name || '';
 
+        // Check if we match based on structured first_name/last_name properties
         const lastNameMatch = lastNameValue.toLowerCase().includes(lastName.toLowerCase());
-
-        if (firstName) {
-          const firstNameProp = obj.properties?.find((p: any) => p.key === 'first_name');
-          const firstNameValue = firstNameProp?.text || firstNameProp?.value || '';
-          const firstNameMatch = firstNameValue.toLowerCase().includes(firstName.toLowerCase());
-          return lastNameMatch && firstNameMatch;
+        let firstNameMatch = true; // Default to true if no firstName provided
+        
+        if (firstName && firstNameValue) {
+          firstNameMatch = firstNameValue.toLowerCase().includes(firstName.toLowerCase());
         }
 
-        return lastNameMatch;
+        // If we have structured data and it matches, return true
+        if (lastNameValue && lastNameMatch && firstNameMatch) {
+          return true;
+        }
+
+        // Fallback: check the main name field if structured data is not available or doesn't match
+        if (mainName) {
+          const mainNameLower = mainName.toLowerCase();
+          const lastNameInMainName = mainNameLower.includes(lastName.toLowerCase());
+          
+          if (firstName) {
+            const firstNameInMainName = mainNameLower.includes(firstName.toLowerCase());
+            return lastNameInMainName && firstNameInMainName;
+          }
+          
+          return lastNameInMainName;
+        }
+
+        // If we only had structured data and it didn't match, return false
+        return lastNameMatch && firstNameMatch;
       });
     } catch (error) {
       console.error('Error searching persons by name:', error);

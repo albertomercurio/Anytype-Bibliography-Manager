@@ -62,6 +62,7 @@ export class DuplicateDetector {
       let similarity = 0;
       let matchReason = '';
 
+      // First, try to match using structured first_name/last_name properties
       if (lastName && personLastName) {
         const lastNameSimilarity = stringSimilarity.compareTwoStrings(
           lastName.toLowerCase(),
@@ -87,6 +88,7 @@ export class DuplicateDetector {
         }
       }
 
+      // Fallback: check full name similarity (important for objects with only main name field)
       const fullName = [firstName, lastName].filter(Boolean).join(' ');
       if (fullName && personName) {
         const fullNameSimilarity = stringSimilarity.compareTwoStrings(
@@ -95,7 +97,29 @@ export class DuplicateDetector {
         );
         if (fullNameSimilarity > similarity) {
           similarity = fullNameSimilarity;
-          matchReason = 'Full name similarity';
+          matchReason = 'Full name similarity with main name field';
+        }
+      }
+
+      // Additional fallback: if structured properties are empty, parse the main name
+      if (similarity === 0 && personName && (!personFirstName && !personLastName)) {
+        const parsedName = this.parseFullName(personName);
+        if (parsedName.lastName && lastName) {
+          const lastNameSim = stringSimilarity.compareTwoStrings(
+            lastName.toLowerCase(),
+            parsedName.lastName.toLowerCase()
+          );
+          
+          if (lastNameSim >= 0.95) {
+            if (firstName && parsedName.firstName) {
+              const firstNameSim = this.compareFirstNames(firstName, parsedName.firstName);
+              similarity = (lastNameSim + firstNameSim) / 2;
+              matchReason = 'Parsed name match from main name field';
+            } else {
+              similarity = lastNameSim * 0.7;
+              matchReason = 'Parsed last name match from main name field';
+            }
+          }
         }
       }
 
@@ -230,6 +254,21 @@ export class DuplicateDetector {
     }
 
     return false;
+  }
+
+  private parseFullName(fullName: string): { firstName: string; lastName: string } {
+    const parts = fullName.trim().split(/\s+/);
+    
+    if (parts.length === 0) {
+      return { firstName: '', lastName: '' };
+    } else if (parts.length === 1) {
+      return { firstName: '', lastName: parts[0] };
+    } else {
+      // Assume last part is the last name, everything else is first name
+      const lastName = parts[parts.length - 1];
+      const firstName = parts.slice(0, -1).join(' ');
+      return { firstName, lastName };
+    }
   }
 
   private getMatchType(similarity: number): 'exact' | 'high' | 'medium' | 'low' {
