@@ -68,7 +68,7 @@ export class DuplicateDetector {
   ): Promise<DuplicateCandidate[]> {
     const candidates: DuplicateCandidate[] = [];
 
-    // Check ORCID first if available
+    // Step 1: Check ORCID first if available
     if (orcid) {
       const orcidMatches = await this.client.searchPersonsByOrcid(orcid);
       candidates.push(...orcidMatches.map(person => ({
@@ -79,22 +79,10 @@ export class DuplicateDetector {
       })));
     }
 
-    // Search by name - first try the current search method, then get all people as fallback
-    let allPossibleMatches = await this.client.searchPersonsByName(lastName, firstName);
-    
-    // Also get all people to ensure we don't miss accent variations and other search issues
-    // This is especially important for names with accents that might not be found by text search
+    // Step 2: Get all people and iterate over them
     const allPeople = await this.getAllPeople();
-    
-    // Combine both approaches, avoiding duplicates
-    const seenIds = new Set(allPossibleMatches.map(p => p.id));
-    for (const person of allPeople) {
-      if (!seenIds.has(person.id)) {
-        allPossibleMatches.push(person);
-      }
-    }
 
-    for (const person of allPossibleMatches) {
+    for (const person of allPeople) {
       // Skip if already found by ORCID
       if (candidates.some(c => c.object.id === person.id)) continue;
 
@@ -105,9 +93,9 @@ export class DuplicateDetector {
       let similarity = 0;
       let matchReason = '';
 
-      // Calculate similarity based on available data
+      // Step 3: Check what data is available and use appropriate strategy
       if (personLastName || personFirstName) {
-        // Case 1: Structured properties exist
+        // Case A: Person has structured first_name/last_name properties - use them
         const lastNameSimilarity = lastName && personLastName
           ? compareStrings(normalizeText(lastName), normalizeText(personLastName))
           : 0;
@@ -120,36 +108,32 @@ export class DuplicateDetector {
           if (firstName && personFirstName) {
             similarity = (lastNameSimilarity + firstNameSimilarity) / 2;
             if (firstNameSimilarity >= 0.95) {
-              matchReason = 'Full name match';
+              matchReason = 'Full name match (structured properties)';
             } else if (firstNameSimilarity >= 0.5) {
-              matchReason = 'Last name match, possible first name abbreviation';
+              matchReason = 'Last name match, possible first name abbreviation (structured)';
             } else {
-              matchReason = 'Last name match, different first name';
+              matchReason = 'Last name match, different first name (structured)';
             }
           } else if (firstName && !personFirstName) {
-            // We have firstName but person doesn't have it stored
             similarity = lastNameSimilarity * 0.8;
-            matchReason = 'Last name match (first name not stored)';
+            matchReason = 'Last name match, first name not stored (structured)';
           } else {
-            // No firstName provided
             similarity = lastNameSimilarity * 0.9;
-            matchReason = 'Last name match only';
+            matchReason = 'Last name match only (structured)';
           }
         } else if (lastNameSimilarity >= 0.8) {
           similarity = lastNameSimilarity * 0.7;
-          matchReason = 'Similar last name';
+          matchReason = 'Similar last name (structured)';
         }
-      }
-
-      // Case 2: Check main name field
-      if (personName) {
+      } else if (personName) {
+        // Case B: Person only has full name field - compare against that
         const fullSearchName = [firstName, lastName].filter(Boolean).join(' ');
-        const mainNameSimilarity = compareStrings(
+        const fullNameSimilarity = compareStrings(
           normalizeText(fullSearchName),
           normalizeText(personName)
         );
 
-        // Also check if the name field contains the parts we're looking for
+        // Also try parsing the full name to compare parts
         const parsedName = this.parseFullName(personName);
         let parsedSimilarity = 0;
 
@@ -167,22 +151,23 @@ export class DuplicateDetector {
           }
         }
 
-        // Use the best similarity score
-        const bestMainSimilarity = Math.max(mainNameSimilarity, parsedSimilarity);
+        // Use the best similarity from full name comparison approaches
+        similarity = Math.max(fullNameSimilarity, parsedSimilarity);
 
-        if (bestMainSimilarity > similarity) {
-          similarity = bestMainSimilarity;
-          if (parsedSimilarity > mainNameSimilarity) {
-            matchReason = 'Parsed name match from main name field';
+        if (similarity >= 0.95) {
+          if (parsedSimilarity > fullNameSimilarity) {
+            matchReason = 'Parsed name match from full name field';
           } else {
-            matchReason = 'Full name match with main name field';
+            matchReason = 'Full name field match';
           }
+        } else if (similarity >= 0.8) {
+          matchReason = 'Similar full name';
         }
       }
+      // Case C: Person has neither structured properties nor full name - skip
 
-      // Lower threshold for person matching to catch abbreviations and variations
+      // Only add candidates above threshold
       const personThreshold = 0.6;
-
       if (similarity >= personThreshold) {
         candidates.push({
           object: person,
