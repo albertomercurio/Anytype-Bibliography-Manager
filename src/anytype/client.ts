@@ -526,7 +526,7 @@ export class AnytypeClient {
     }
   }
 
-  async updateObject(objectId: string, properties: Record<string, any>): Promise<boolean> {
+  async updateObject(objectId: string, properties: Array<{ key: string; [key: string]: any }>): Promise<boolean> {
     try {
       await this.client.patch(`/spaces/${this.spaceId}/objects/${objectId}`, {
         properties

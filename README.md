@@ -5,7 +5,8 @@ Automated bibliography management for Anytype with DOI extraction, BibTeX genera
 ## Features
 
 - 📚 **DOI Metadata Extraction**: Automatically fetch article/book metadata from CrossRef and DataCite
-- 🔖 **BibTeX Generation**: Create properly formatted BibTeX entries with customizable cite keys
+- 🔖 **BibTeX Generation**: Create properly formatted BibTeX entries with LaTeX-compatible author formatting
+- 🔧 **BibTeX Repair**: Fix author formatting in existing articles to ensure LaTeX compatibility
 - 🔍 **Intelligent Duplicate Detection**: Smart matching for authors (including ORCID), journals (including abbreviations), and articles
 - 👥 **Author Management**: Handle author name variations, abbreviations, and ORCID identifiers
 - 📖 **Journal Recognition**: Detect journal abbreviations and variations
@@ -107,18 +108,64 @@ Then run:
 anytype-bib batch dois.txt --auto-resolve
 ```
 
+### Fix BibTeX formatting for existing articles
+
+If you have existing articles that were created before the BibTeX author formatting was fixed, you can update them to use the correct LaTeX-compatible format:
+
+```bash
+# Preview what would be changed (recommended first step)
+anytype-bib refresh-bibtex --dry-run
+
+# Update first 10 articles with preview
+anytype-bib refresh-bibtex --limit 10 --dry-run
+
+# Update first 10 articles
+anytype-bib refresh-bibtex --limit 10 --yes
+
+# Update all articles (will ask for confirmation)
+anytype-bib refresh-bibtex
+
+# Update all articles without confirmation
+anytype-bib refresh-bibtex --yes
+```
+
+**Why this is needed:** Earlier versions of the tool generated BibTeX with author names in the format "FirstName LastName and FirstName LastName". The correct LaTeX format is "LastName, FirstName and LastName, FirstName". This command fixes existing entries to use the proper format that LaTeX bibliography processors expect.
+
+**What it does:**
+- Finds all articles in your Anytype space that have DOIs
+- Re-fetches metadata from CrossRef/DataCite for each article
+- Regenerates BibTeX with the correct author formatting
+- Updates only the BibTeX field (other metadata remains unchanged)
+- Shows before/after comparison when using `--dry-run`
+
+**Example of the fix:**
+```diff
+# Before (old format)
+- author = {John Smith and Jane Doe and Robert Johnson}
+
+# After (correct format) 
++ author = {Smith, John and Doe, Jane and Johnson, Robert}
+```
+
 ### Command Options
 
+**For `add` and `batch` commands:**
 - `--auto-resolve`: Automatically use existing authors/journals when duplicates are found
 - `--skip-duplicates`: Skip duplicate checking entirely
 - `--pdf <path>`: Attach a PDF file (coming soon)
 - `--ai`: Use AI for enhanced processing (requires API key)
+
+**For `refresh-bibtex` command:**
+- `--dry-run`: Preview changes without updating anything in Anytype
+- `--limit <number>`: Process only the first N articles (useful for testing)
+- `--yes`: Skip confirmation prompt and proceed automatically
 
 ## How It Works
 
 1. **DOI Resolution**: Fetches metadata from CrossRef (primary) or DataCite (fallback)
 2. **BibTeX Generation**: Creates formatted BibTeX with:
    - Title in double braces `{{title}}` to preserve capitalization
+   - Authors in LaTeX format: `LastName, FirstName and LastName, FirstName`
    - Cite key format: `LastYYYYTitle` (sanitized for LaTeX compatibility)
 3. **Duplicate Detection**:
    - Articles: Exact DOI matching
@@ -213,6 +260,12 @@ For development, use `npm run dev` which runs the TypeScript source directly wit
   # Edit ~/.anytype-bib/config.json and change:
   "duplicateThreshold": 0.8  // 0.0-1.0, default 0.8
   ```
+
+### BibTeX author formatting issues in LaTeX
+- **Problem**: LaTeX bibliography processors don't sort or format authors correctly
+- **Cause**: Older versions of this tool generated BibTeX with "FirstName LastName" format
+- **Solution**: Run `anytype-bib refresh-bibtex --dry-run` to preview fixes, then `anytype-bib refresh-bibtex --yes` to update all articles
+- **Result**: Authors will be formatted as "LastName, FirstName and LastName, FirstName" which is the standard LaTeX format
 
 ## Roadmap
 

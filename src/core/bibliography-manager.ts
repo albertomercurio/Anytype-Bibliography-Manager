@@ -307,4 +307,144 @@ export class BibliographyManager {
       return { firstName, lastName };
     }
   }
+
+  async refreshBibTeXEntries(options: {
+    limit?: number;
+    dryRun?: boolean;
+    skipConfirmation?: boolean;
+  } = {}): Promise<void> {
+    const typeKeys = this.client.getTypeKeys();
+    
+    // Get all articles
+    console.log(chalk.blue('📚 Finding existing articles...'));
+    const allArticles = await this.client.searchByType(typeKeys.article, options.limit || 1000);
+    
+    if (allArticles.length === 0) {
+      console.log(chalk.yellow('No articles found in your space.'));
+      return;
+    }
+
+    console.log(chalk.green(`✓ Found ${allArticles.length} articles`));
+
+    // Filter articles that have DOIs
+    const articlesWithDOI = allArticles.filter(article => {
+      const doiProp = article.properties?.find(p => p.key === 'doi');
+      return doiProp && (doiProp.text || doiProp.value);
+    });
+
+    console.log(chalk.blue(`📋 ${articlesWithDOI.length} articles have DOIs that can be refreshed`));
+
+    if (articlesWithDOI.length === 0) {
+      console.log(chalk.yellow('No articles with DOIs found. Nothing to refresh.'));
+      return;
+    }
+
+    // Limit articles if specified
+    const articlesToProcess = options.limit ? articlesWithDOI.slice(0, options.limit) : articlesWithDOI;
+
+    if (!options.skipConfirmation && !options.dryRun) {
+      const { proceed } = await inquirer.prompt([{
+        type: 'confirm',
+        name: 'proceed',
+        message: `Update BibTeX for ${articlesToProcess.length} articles?`,
+        default: false
+      }]);
+
+      if (!proceed) {
+        console.log(chalk.gray('Cancelled.'));
+        return;
+      }
+    }
+    
+    if (options.dryRun) {
+      console.log(chalk.cyan(`🔍 Dry run: Will preview changes for ${articlesToProcess.length} articles`));
+    }
+
+    let updated = 0;
+    let failed = 0;
+    let skipped = 0;
+
+    console.log(chalk.blue(`\n🔄 Processing ${articlesToProcess.length} articles...\n`));
+
+    for (let i = 0; i < articlesToProcess.length; i++) {
+      const article = articlesToProcess[i];
+      const doiProp = article.properties?.find(p => p.key === 'doi');
+      const doi = doiProp?.text || doiProp?.value;
+
+      console.log(chalk.gray(`[${i + 1}/${articlesToProcess.length}] ${article.name}`));
+
+      if (!doi) {
+        console.log(chalk.yellow('  ⚠️  No DOI found, skipping'));
+        skipped++;
+        continue;
+      }
+
+      try {
+        // Fetch fresh metadata from DOI
+        const spinner = ora('  Fetching metadata...').start();
+        const metadata = await this.doiResolver.resolve(doi);
+        spinner.stop();
+
+        if (!metadata) {
+          console.log(chalk.red('  ✗ Failed to fetch metadata'));
+          failed++;
+          continue;
+        }
+
+        // Generate new BibTeX
+        const newBibTeX = this.bibtexFormatter.formatEntry(metadata);
+        
+        // Get current BibTeX for comparison
+        const currentBibTeXProp = article.properties?.find(p => p.key === 'bib_te_x');
+        const currentBibTeX = currentBibTeXProp?.text || currentBibTeXProp?.value || '';
+
+        if (options.dryRun) {
+          console.log(chalk.cyan('  📋 Would update BibTeX:'));
+          console.log(chalk.gray('    Current authors in BibTeX:'));
+          const currentAuthors = this.extractAuthorsFromBibTeX(currentBibTeX);
+          console.log(chalk.gray(`      ${currentAuthors}`));
+          
+          console.log(chalk.gray('    New authors in BibTeX:'));
+          const newAuthors = this.extractAuthorsFromBibTeX(newBibTeX);
+          console.log(chalk.green(`      ${newAuthors}`));
+          updated++;
+        } else {
+          // Update the BibTeX field
+          const success = await this.client.updateObject(article.id, [
+            { key: 'bib_te_x', text: newBibTeX }
+          ]);
+
+          if (success) {
+            console.log(chalk.green('  ✓ BibTeX updated'));
+            updated++;
+          } else {
+            console.log(chalk.red('  ✗ Failed to update'));
+            failed++;
+          }
+        }
+
+      } catch (error: any) {
+        console.log(chalk.red(`  ✗ Error: ${error.message}`));
+        failed++;
+      }
+    }
+
+    console.log(chalk.blue('\n📊 Refresh complete:'));
+    if (options.dryRun) {
+      console.log(chalk.cyan(`  📋 Would update: ${updated}`));
+    } else {
+      console.log(chalk.green(`  ✓ Updated: ${updated}`));
+    }
+    if (failed > 0) {
+      console.log(chalk.red(`  ✗ Failed: ${failed}`));
+    }
+    if (skipped > 0) {
+      console.log(chalk.yellow(`  ⚠️  Skipped: ${skipped}`));
+    }
+  }
+
+  private extractAuthorsFromBibTeX(bibtex: string): string {
+    const match = bibtex.match(/author\s*=\s*\{([^}]+)\}/);
+    return match ? match[1] : 'No authors found';
+  }
 }

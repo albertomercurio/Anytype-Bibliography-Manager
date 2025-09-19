@@ -24,7 +24,6 @@ program
   .description('Automated bibliography management for Anytype with DOI extraction and BibTeX generation')
   .version('1.0.0')
   .option('-v, --verbose', 'enable verbose output')
-  .option('--dry-run', 'show what would be done without making changes')
   .addHelpText('after', `
 Examples:
   $ anytype-bib add 10.1103/PhysRevLett.124.010503
@@ -632,6 +631,58 @@ JSON format (with --json):
 
     } catch (error: any) {
       console.error(chalk.red('❌ Stats failed:'), error.message);
+      process.exit(1);
+    }
+  });
+
+// Add refresh-bibtex command
+program
+  .command('refresh-bibtex')
+  .description('Update BibTeX formatting for existing articles to use the correct author format')
+  .option('-l, --limit <number>', 'Maximum number of articles to process (default: all)', 'all')
+  .option('-d, --dry-run', 'Show what would be updated without making changes')
+  .option('-y, --yes', 'Skip confirmation prompt and proceed automatically')
+  .addHelpText('after', `
+Options:
+  -l, --limit <number>    Process only the first N articles (useful for testing)
+  -d, --dry-run          Preview changes without updating anything in Anytype
+  -y, --yes              Skip the confirmation prompt and proceed automatically
+
+Examples:
+  $ anytype-bib refresh-bibtex                     # Update all articles (with confirmation)
+  $ anytype-bib refresh-bibtex --limit 10 --dry-run # Preview first 10 articles
+  $ anytype-bib refresh-bibtex --yes               # Update all without confirmation
+  $ anytype-bib refresh-bibtex --limit 5 --yes     # Update first 5 articles without confirmation
+
+What this command does:
+  1. Finds all existing articles in your Anytype space
+  2. For each article with a DOI, re-fetches metadata from CrossRef/DataCite
+  3. Regenerates BibTeX with the correct author format: "LastName, FirstName and ..."
+  4. Updates only the BibTeX field in Anytype (other fields remain unchanged)
+
+Why you need this:
+  • Fixes author formatting from "FirstName LastName" to "LastName, FirstName"
+  • Ensures compatibility with LaTeX bibliography processors
+  • Updates existing entries without recreating articles or changing metadata
+
+The command shows a preview of changes and asks for confirmation unless --yes is used.
+Articles without DOIs or that fail metadata lookup will be skipped with a warning.
+`)
+  .action(async (options) => {
+    try {
+      ensureConfigured();
+      
+      console.log(chalk.blue('🔄 Refreshing BibTeX formatting for existing articles...\n'));
+
+      const manager = new BibliographyManager();
+      await manager.refreshBibTeXEntries({
+        limit: options.limit === 'all' ? undefined : parseInt(options.limit),
+        dryRun: options.dryRun,
+        skipConfirmation: options.yes
+      });
+
+    } catch (error: any) {
+      console.error(chalk.red('❌ Refresh failed:'), error.message);
       process.exit(1);
     }
   });
