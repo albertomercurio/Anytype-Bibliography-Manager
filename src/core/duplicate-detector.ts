@@ -68,6 +68,7 @@ export class DuplicateDetector {
   ): Promise<DuplicateCandidate[]> {
     const candidates: DuplicateCandidate[] = [];
 
+    // Check ORCID first if available
     if (orcid) {
       const orcidMatches = await this.client.searchPersonsByOrcid(orcid);
       candidates.push(...orcidMatches.map(person => ({
@@ -78,9 +79,12 @@ export class DuplicateDetector {
       })));
     }
 
-    const nameMatches = await this.client.searchPersonsByName(lastName);
+    // Search by name - the client now handles the search properly
+    const nameMatches = await this.client.searchPersonsByName(lastName, firstName);
+
 
     for (const person of nameMatches) {
+      // Skip if already found by ORCID
       if (candidates.some(c => c.object.id === person.id)) continue;
 
       const personLastName = this.getPropertyValue(person, 'last_name') || '';
@@ -90,71 +94,84 @@ export class DuplicateDetector {
       let similarity = 0;
       let matchReason = '';
 
-      // First, try to match using structured first_name/last_name properties
-      if (lastName && personLastName) {
-        const lastNameSimilarity = compareStrings(
-          lastName.toLowerCase(),
-          personLastName.toLowerCase()
-        );
+      // Calculate similarity based on available data
+      if (personLastName || personFirstName) {
+        // Case 1: Structured properties exist
+        const lastNameSimilarity = lastName && personLastName
+          ? compareStrings(normalizeText(lastName), normalizeText(personLastName))
+          : 0;
+
+        const firstNameSimilarity = firstName && personFirstName
+          ? this.compareFirstNames(firstName, personFirstName)
+          : 0;
 
         if (lastNameSimilarity >= 0.95) {
           if (firstName && personFirstName) {
-            const firstNameSimilarity = this.compareFirstNames(firstName, personFirstName);
             similarity = (lastNameSimilarity + firstNameSimilarity) / 2;
-
             if (firstNameSimilarity >= 0.95) {
               matchReason = 'Full name match';
             } else if (firstNameSimilarity >= 0.5) {
               matchReason = 'Last name match, possible first name abbreviation';
             } else {
-              matchReason = 'Last name match only';
+              matchReason = 'Last name match, different first name';
             }
+          } else if (firstName && !personFirstName) {
+            // We have firstName but person doesn't have it stored
+            similarity = lastNameSimilarity * 0.8;
+            matchReason = 'Last name match (first name not stored)';
           } else {
-            similarity = lastNameSimilarity * 0.7;
+            // No firstName provided
+            similarity = lastNameSimilarity * 0.9;
             matchReason = 'Last name match only';
           }
+        } else if (lastNameSimilarity >= 0.8) {
+          similarity = lastNameSimilarity * 0.7;
+          matchReason = 'Similar last name';
         }
       }
 
-      // Fallback: check full name similarity (important for objects with only main name field)
-      const fullName = [firstName, lastName].filter(Boolean).join(' ');
-      if (fullName && personName) {
-        const fullNameSimilarity = compareStrings(
-          fullName.toLowerCase(),
-          personName.toLowerCase()
+      // Case 2: Check main name field
+      if (personName) {
+        const fullSearchName = [firstName, lastName].filter(Boolean).join(' ');
+        const mainNameSimilarity = compareStrings(
+          normalizeText(fullSearchName),
+          normalizeText(personName)
         );
-        if (fullNameSimilarity > similarity) {
-          similarity = fullNameSimilarity;
-          matchReason = 'Full name similarity with main name field';
-        }
-      }
 
-      // Additional fallback: if structured properties are empty, parse the main name
-      if (similarity === 0 && personName && (!personFirstName && !personLastName)) {
+        // Also check if the name field contains the parts we're looking for
         const parsedName = this.parseFullName(personName);
+        let parsedSimilarity = 0;
+
         if (parsedName.lastName && lastName) {
-          const lastNameSim = compareStrings(
-            lastName.toLowerCase(),
-            parsedName.lastName.toLowerCase()
+          const parsedLastSim = compareStrings(
+            normalizeText(lastName),
+            normalizeText(parsedName.lastName)
           );
-          
-          if (lastNameSim >= 0.95) {
-            if (firstName && parsedName.firstName) {
-              const firstNameSim = this.compareFirstNames(firstName, parsedName.firstName);
-              similarity = (lastNameSim + firstNameSim) / 2;
-              matchReason = 'Parsed name match from main name field';
-            } else {
-              similarity = lastNameSim * 0.7;
-              matchReason = 'Parsed last name match from main name field';
-            }
+
+          if (firstName && parsedName.firstName) {
+            const parsedFirstSim = this.compareFirstNames(firstName, parsedName.firstName);
+            parsedSimilarity = (parsedLastSim + parsedFirstSim) / 2;
+          } else {
+            parsedSimilarity = parsedLastSim * 0.8;
+          }
+        }
+
+        // Use the best similarity score
+        const bestMainSimilarity = Math.max(mainNameSimilarity, parsedSimilarity);
+
+        if (bestMainSimilarity > similarity) {
+          similarity = bestMainSimilarity;
+          if (parsedSimilarity > mainNameSimilarity) {
+            matchReason = 'Parsed name match from main name field';
+          } else {
+            matchReason = 'Full name match with main name field';
           }
         }
       }
 
-      // For person matching, use a lower threshold to catch more potential matches
-      // since names can have variations, abbreviations, etc.
-      const personThreshold = Math.min(this.threshold * 0.7, 0.6);
-      
+      // Lower threshold for person matching to catch abbreviations and variations
+      const personThreshold = 0.6;
+
       if (similarity >= personThreshold) {
         candidates.push({
           object: person,
