@@ -6,23 +6,31 @@ Automated bibliography management for Anytype with DOI extraction, BibTeX genera
 
 - 📚 **DOI Metadata Extraction**: Automatically fetch article/book metadata from CrossRef and DataCite
 - 🔖 **BibTeX Generation**: Create properly formatted BibTeX entries with LaTeX-compatible author formatting
-- 🔧 **BibTeX Repair**: Fix author formatting in existing articles to ensure LaTeX compatibility
+- 🔧 **BibTeX Refresh**: Re-update BibTeX data for existing articles with improved formatting and metadata
 - 🔍 **Intelligent Duplicate Detection**: Smart matching for authors (including ORCID), journals (including abbreviations), and articles
 - 👥 **Author Management**: Handle author name variations, abbreviations, and ORCID identifiers
 - 📖 **Journal Recognition**: Detect journal abbreviations and variations
 - 🤖 **AI Integration** (optional): Use OpenAI or Anthropic for enhanced processing
 - 🧪 **Comprehensive Testing**: Full test suite for validation and integration testing
-- 🛠 **Code Quality**: Refactored codebase with shared utilities and improved error handling
-- 📄 **PDF Support** (planned): Attach PDFs to references
 
 ## Prerequisites
 
+### System Requirements
 - Node.js 18+ and npm
 - Anytype desktop app (v0.46.7+)
 - Active Anytype account with API access
-- A Research space with object types for articles, people, journals, and books (the tool will automatically discover these during setup)
 
-> **Note**: The project is written in TypeScript and needs to be compiled before installation. All build tools are included as dependencies.
+### Required Anytype Object Types
+Your Anytype space must have the following object types configured with their respective properties:
+
+| Object Type | Key | Required Properties | Property Types |
+|-------------|-----|-------------------|----------------|
+| **Article** | `reference` | `title`, `authors`, `journal`, `year`, `doi`, `url`, `bib_te_x` | text, objects, objects, number, text, url, text |
+| **Person** | `human` | `first_name`, `last_name`, `orcid` | text, text, text |
+| **Journal** | `journal` | (auto-managed by title) | - |
+| **Book** | `book` | `authors`, `year`, `bib_te_x` | objects, number, text |
+
+> **Note**: The tool automatically discovers these object types during setup. If any are missing, you'll need to create them in your Anytype space before using the tool. The project is written in TypeScript and needs to be compiled before installation.
 
 ## Installation
 
@@ -110,9 +118,9 @@ Then run:
 anytype-bib batch dois.txt --auto-resolve
 ```
 
-### Fix BibTeX formatting for existing articles
+### Refresh BibTeX data for existing articles
 
-If you have existing articles that were created before the BibTeX author formatting was fixed, you can update them to use the correct LaTeX-compatible format:
+Update BibTeX formatting and metadata for articles already in your Anytype space:
 
 ```bash
 # Preview what would be changed (recommended first step)
@@ -131,23 +139,12 @@ anytype-bib refresh-bibtex
 anytype-bib refresh-bibtex --yes
 ```
 
-**Why this is needed:** Earlier versions of the tool generated BibTeX with author names in the format "FirstName LastName and FirstName LastName". The correct LaTeX format is "LastName, FirstName and LastName, FirstName". This command fixes existing entries to use the proper format that LaTeX bibliography processors expect.
-
 **What it does:**
 - Finds all articles in your Anytype space that have DOIs
 - Re-fetches metadata from CrossRef/DataCite for each article
-- Regenerates BibTeX with the correct author formatting
+- Regenerates BibTeX with updated formatting and metadata
 - Updates only the BibTeX field (other metadata remains unchanged)
 - Shows before/after comparison when using `--dry-run`
-
-**Example of the fix:**
-```diff
-# Before (old format)
-- author = {John Smith and Jane Doe and Robert Johnson}
-
-# After (correct format) 
-+ author = {Smith, John and Doe, Jane and Johnson, Robert}
-```
 
 ### Command Options
 
@@ -168,15 +165,12 @@ anytype-bib refresh-bibtex --yes
 2. **BibTeX Generation**: Creates formatted BibTeX with:
    - Title in double braces `{{title}}` to preserve capitalization
    - Authors in LaTeX format: `LastName, FirstName and LastName, FirstName`
-   - Cite key format: `LastYYYYTitle` (sanitized for LaTeX compatibility)
+   - Citation keys: `LastYYYYTitle` (sanitized for LaTeX compatibility)
 3. **Duplicate Detection**:
    - Articles: Exact DOI matching
    - Authors: ORCID (if available), name similarity, abbreviation detection
    - Journals: Name normalization, abbreviation recognition
-4. **Interactive Resolution**: When duplicates are found, you can:
-   - Use existing object
-   - Create new anyway
-   - Skip
+4. **Interactive Resolution**: When duplicates are found, you can choose to use existing objects, create new ones, or skip
 
 ## Configuration
 
@@ -216,51 +210,25 @@ If you have an existing `.env` file, run `anytype-bib setup` and it will offer t
 
 ## Testing
 
-The project includes comprehensive tests to ensure reliability:
-
 ### Quick Tests (Recommended)
-Run fast validation tests without requiring API access:
 ```bash
 npm run test:quick
 # or simply:
 npm test
 ```
-
-These validate core functionality like text processing, name parsing, and BibTeX formatting.
+Validates core functionality like text processing, name parsing, and BibTeX formatting without requiring API access.
 
 ### Simple Integration Tests (Recommended)
-Run focused integration tests that verify core functionality without creating test spaces:
 ```bash
 npm run test:simple
 ```
-
-These tests validate:
-- DOI resolution from CrossRef/DataCite APIs
-- BibTeX generation with proper formatting  
-- Anytype API connection and basic queries
-- Core duplicate detection functionality
+Tests DOI resolution, BibTeX generation, Anytype API connection, and duplicate detection with real APIs.
 
 ### Full Integration Tests
-Run complete end-to-end tests with temporary space creation:
 ```bash
 npm run test:integration
 ```
-
-These tests create a temporary space and test the complete workflow, but require manual cleanup afterward.
-
-### Integration Tests
-Run complete tests with temporary space creation:
-```bash
-npm run test:integration
-```
-
-This creates a temporary space and tests:
-- Temporary space creation with unique name (e.g., "BibTest-1234567890")
-- Addition of `n` representative DOIs (reduced to avoid rate limits)
-- Duplicate detection testing by re-adding same DOIs
-- Author and journal uniqueness verification
-- BibTeX formatting validation
-- **Note**: Test spaces need manual cleanup from Anytype UI (API doesn't support space deletion)
+Complete end-to-end tests that create temporary spaces. **Note**: Test spaces require manual cleanup from Anytype UI.
 
 See [test/README.md](test/README.md) for detailed test documentation.
 
@@ -297,9 +265,8 @@ For development, use `npm run dev` which runs the TypeScript source directly wit
 ## Troubleshooting
 
 ### "API connection failed"
-- Ensure Anytype desktop app is running
-- Verify you're logged into your account
-- Check your API key is correct
+- Ensure Anytype desktop app is running and you're logged in
+- Verify your API key is correct
 - Run `anytype-bib setup` to reconfigure
 
 ### "Configuration not found"
@@ -307,44 +274,36 @@ For development, use `npm run dev` which runs the TypeScript source directly wit
 - Configuration is stored globally in `~/.anytype-bib/config.json`
 
 ### "Type 'reference' not found"
-- Ensure your space has object types for articles, people, journals, and books
-- Run `anytype-bib setup` again to rediscover object types in your space
-- The tool automatically detects object types with names like "Article", "Person", "Journal", "Book", etc.
-- If you have custom names, the tool will try to match them intelligently during setup
+- Ensure your space has the required object types (see Prerequisites section)
+- Run `anytype-bib setup` again to rediscover object types
+- The tool automatically detects object types during setup
 
-### Duplicate detection too aggressive/loose
-- Adjust the duplicate threshold in your configuration:
-  ```bash
-  # Edit ~/.anytype-bib/config.json and change:
+### Duplicate detection issues
+- Adjust the duplicate threshold in `~/.anytype-bib/config.json`:
+  ```json
   "duplicateThreshold": 0.8  // 0.0-1.0, default 0.8
   ```
 
-### BibTeX author formatting issues in LaTeX
-- **Problem**: LaTeX bibliography processors don't sort or format authors correctly
-- **Cause**: Older versions of this tool generated BibTeX with "FirstName LastName" format
-- **Solution**: Run `anytype-bib refresh-bibtex --dry-run` to preview fixes, then `anytype-bib refresh-bibtex --yes` to update all articles
-- **Result**: Authors will be formatted as "LastName, FirstName and LastName, FirstName" which is the standard LaTeX format
+## Development
 
-## Code Quality Improvements
+```bash
+# Install dependencies
+npm install
 
-This version includes significant code improvements:
+# Run in development mode with auto-reload
+npm run dev
 
-### ✅ Refactoring Completed
-- **Eliminated Code Duplication**: Extracted shared utilities for name parsing, text normalization, and string sanitization
-- **Improved Error Handling**: Better error messages and validation throughout
-- **Enhanced Type Safety**: More precise TypeScript types for better development experience
-- **Optimized API Calls**: Reduced redundant searches and improved pagination efficiency
-- **Comprehensive Testing**: Added quick validation tests and full integration test suite
+# Build the project
+npm run build
 
-### 📊 Test Coverage
-- **Quick Tests**: Validate core logic without external dependencies
-- **Integration Tests**: End-to-end testing with real Anytype API
-- **BibTeX Validation**: Ensures proper LaTeX-compatible formatting
-- **Duplicate Detection**: Verifies author and journal uniqueness
+# Run tests
+npm test
 
-### 🛠 Development Tools
-- Automated test suite for continuous validation
-- Improved build process with better error reporting
+# Install locally for testing (after building)
+npm link
+```
+
+For development, use `npm run dev` which runs TypeScript source directly with hot reload.
 
 ## Roadmap
 
@@ -353,6 +312,5 @@ This version includes significant code improvements:
 - [ ] arXiv integration
 - [ ] Export bibliography to various formats
 - [ ] Web interface
-- [ ] Mobile app support
 - [x] Comprehensive test suite
 - [x] Code refactoring and optimization
