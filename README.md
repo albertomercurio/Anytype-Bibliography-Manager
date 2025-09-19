@@ -256,7 +256,7 @@ npm run test:integration
 
 This creates a temporary space and tests:
 - Temporary space creation with unique name (e.g., "BibTest-1234567890")
-- Addition of 4 representative DOIs (reduced to avoid rate limits)
+- Addition of `n` representative DOIs (reduced to avoid rate limits)
 - Duplicate detection testing by re-adding same DOIs
 - Author and journal uniqueness verification
 - BibTeX formatting validation
