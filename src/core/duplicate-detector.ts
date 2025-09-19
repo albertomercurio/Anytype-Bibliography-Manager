@@ -79,11 +79,22 @@ export class DuplicateDetector {
       })));
     }
 
-    // Search by name - the client now handles the search properly
-    const nameMatches = await this.client.searchPersonsByName(lastName, firstName);
+    // Search by name - first try the current search method, then get all people as fallback
+    let allPossibleMatches = await this.client.searchPersonsByName(lastName, firstName);
+    
+    // Also get all people to ensure we don't miss accent variations and other search issues
+    // This is especially important for names with accents that might not be found by text search
+    const allPeople = await this.getAllPeople();
+    
+    // Combine both approaches, avoiding duplicates
+    const seenIds = new Set(allPossibleMatches.map(p => p.id));
+    for (const person of allPeople) {
+      if (!seenIds.has(person.id)) {
+        allPossibleMatches.push(person);
+      }
+    }
 
-
-    for (const person of nameMatches) {
+    for (const person of allPossibleMatches) {
       // Skip if already found by ORCID
       if (candidates.some(c => c.object.id === person.id)) continue;
 
@@ -365,5 +376,42 @@ export class DuplicateDetector {
       default:
         return prop.value;
     }
+  }
+
+  // New method to get all people with pagination
+  private async getAllPeople(): Promise<AnytypeObject[]> {
+    let allPeople: AnytypeObject[] = [];
+    let hasMore = true;
+    let offset = 0;
+    const limit = 100;
+
+    while (hasMore) {
+      try {
+        const results = await this.client.searchByType(this.client.getTypeKeys().person, limit, offset);
+        
+        if (results.length === 0) {
+          hasMore = false;
+        } else {
+          allPeople = allPeople.concat(results);
+          offset += limit;
+          
+          // Safety check to prevent infinite loops
+          if (allPeople.length >= 1000) {
+            console.warn('Reached safety limit of 1000 people, stopping pagination');
+            hasMore = false;
+          }
+          
+          // If we got less than the limit, we're probably at the end
+          if (results.length < limit) {
+            hasMore = false;
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching people page:', error);
+        hasMore = false;
+      }
+    }
+
+    return allPeople;
   }
 }
