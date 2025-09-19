@@ -23,12 +23,12 @@ Automated bibliography management for Anytype with DOI extraction, BibTeX genera
 ### Required Anytype Object Types
 Your Anytype space must have the following object types configured with their respective properties:
 
-| Object Type | Key | Required Properties | Property Types |
-|-------------|-----|-------------------|----------------|
-| **Article** | `reference` | `title`, `authors`, `journal`, `year`, `doi`, `url`, `bib_te_x` | text, objects, objects, number, text, url, text |
-| **Person** | `human` | `first_name`, `last_name`, `orcid` | text, text, text |
-| **Journal** | `journal` | (auto-managed by title) | - |
-| **Book** | `book` | `authors`, `year`, `bib_te_x` | objects, number, text |
+| Object Type | Required Properties | Property Types |
+|-------------|-------------------|----------------|
+| **Article** | Title, Authors, Journal, Year, DOI, URL, BibTeX | text, objects, objects, number, text, url, text |
+| **Person** | First Name, Last Name, ORCID | text, text, text |
+| **Journal** | (auto-managed by title) | - |
+| **Book** | Authors, Year, BibTeX | objects, number, text |
 
 > **Note**: The tool automatically discovers these object types during setup. If any are missing, you'll need to create them in your Anytype space before using the tool. The project is written in TypeScript and needs to be compiled before installation.
 
