@@ -31,8 +31,15 @@ export class ConfigManager {
   private configPath: string;
 
   constructor() {
-    this.configDir = path.join(os.homedir(), '.anytype-bib');
-    this.configPath = path.join(this.configDir, 'config.json');
+    // Check for test config override first
+    const testConfigPath = process.env.ANYTYPE_BIB_CONFIG || process.env.ANYTYPE_BIB_TEST_CONFIG;
+    if (testConfigPath && fs.existsSync(testConfigPath)) {
+      this.configPath = testConfigPath;
+      this.configDir = path.dirname(testConfigPath);
+    } else {
+      this.configDir = path.join(os.homedir(), '.anytype-bib');
+      this.configPath = path.join(this.configDir, 'config.json');
+    }
   }
 
   /**

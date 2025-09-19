@@ -1,6 +1,7 @@
 import { distance } from 'fastest-levenshtein';
 import { AnytypeObject } from '../types/anytype';
 import { AnytypeClient } from '../anytype/client';
+import { normalizeText, isAbbreviation, parseFullName } from '../utils/text-utils';
 
 export interface DuplicateCandidate {
   object: AnytypeObject;
@@ -9,16 +10,6 @@ export interface DuplicateCandidate {
   matchReason: string;
 }
 
-// Helper function to normalize text for comparison (remove accents, punctuation, etc.)
-function normalizeText(text: string): string {
-  return text
-    .normalize('NFD') // Decompose accented characters
-    .replace(/[\u0300-\u036f]/g, '') // Remove diacritical marks
-    .toLowerCase()
-    .replace(/[^\w\s]/g, ' ') // Replace punctuation with spaces
-    .replace(/\s+/g, ' ') // Normalize whitespace
-    .trim();
-}
 
 // Helper function to calculate similarity between two strings (0-1)
 function compareStrings(str1: string, str2: string): number {
@@ -238,30 +229,7 @@ export class DuplicateDetector {
   }
 
   private isAbbreviation(abbr: string, full: string): boolean {
-    // Normalize both strings for comparison
-    const normAbbr = normalizeText(abbr);
-    const normFull = normalizeText(full);
-    
-    if (normAbbr.length > normFull.length) return false;
-
-    let checkAbbr = normAbbr;
-    if (checkAbbr.endsWith('.')) {
-      checkAbbr = checkAbbr.slice(0, -1);
-    }
-
-    if (checkAbbr.length === 1) {
-      return normFull.startsWith(checkAbbr);
-    }
-
-    const abbrParts = checkAbbr.split(/[\s.-]+/);
-    const fullParts = normFull.split(/[\s-]+/);
-
-    if (abbrParts.length > fullParts.length) return false;
-
-    return abbrParts.every((part, i) => {
-      if (i >= fullParts.length) return false;
-      return fullParts[i].startsWith(part);
-    });
+    return isAbbreviation(abbr, full);
   }
 
   private normalizeJournalName(name: string): string {
@@ -309,35 +277,7 @@ export class DuplicateDetector {
   }
 
   private parseFullName(fullName: string): { firstName: string; lastName: string } {
-    const parts = fullName.trim().split(/\s+/);
-    
-    if (parts.length === 0) {
-      return { firstName: '', lastName: '' };
-    } else if (parts.length === 1) {
-      return { firstName: '', lastName: parts[0] };
-    } else if (parts.length === 2) {
-      return { firstName: parts[0], lastName: parts[1] };
-    } else {
-      // For 3+ parts, use heuristics to identify compound last names
-      // Common patterns: "Di", "De", "Van", "Von", "Del", "Da", "La", "Le", etc.
-      const lastNamePrefixes = new Set(['di', 'de', 'van', 'von', 'del', 'da', 'la', 'le', 'el', 'al', 'bin', 'ibn', 'mac', 'mc', 'o', 'san', 'santa']);
-      
-      // Find the start of the last name (look for prefixes)
-      let lastNameStartIndex = parts.length - 1;
-      
-      for (let i = parts.length - 2; i >= 1; i--) {
-        const part = parts[i].toLowerCase();
-        if (lastNamePrefixes.has(part) || part.endsWith('.')) {
-          lastNameStartIndex = i;
-        } else {
-          break;
-        }
-      }
-      
-      const lastName = parts.slice(lastNameStartIndex).join(' ');
-      const firstName = parts.slice(0, lastNameStartIndex).join(' ');
-      return { firstName, lastName };
-    }
+    return parseFullName(fullName);
   }
 
   private getMatchType(similarity: number): 'exact' | 'high' | 'medium' | 'low' {

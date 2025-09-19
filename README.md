@@ -11,6 +11,8 @@ Automated bibliography management for Anytype with DOI extraction, BibTeX genera
 - 👥 **Author Management**: Handle author name variations, abbreviations, and ORCID identifiers
 - 📖 **Journal Recognition**: Detect journal abbreviations and variations
 - 🤖 **AI Integration** (optional): Use OpenAI or Anthropic for enhanced processing
+- 🧪 **Comprehensive Testing**: Full test suite for validation and integration testing
+- 🛠 **Code Quality**: Refactored codebase with shared utilities and improved error handling
 - 📄 **PDF Support** (planned): Attach PDFs to references
 
 ## Prerequisites
@@ -212,6 +214,56 @@ The `typeKeys` section is automatically populated during setup by discovering th
 
 If you have an existing `.env` file, run `anytype-bib setup` and it will offer to migrate your configuration automatically.
 
+## Testing
+
+The project includes comprehensive tests to ensure reliability:
+
+### Quick Tests (Recommended)
+Run fast validation tests without requiring API access:
+```bash
+npm run test:quick
+# or simply:
+npm test
+```
+
+These validate core functionality like text processing, name parsing, and BibTeX formatting.
+
+### Simple Integration Tests (Recommended)
+Run focused integration tests that verify core functionality without creating test spaces:
+```bash
+npm run test:simple
+```
+
+These tests validate:
+- DOI resolution from CrossRef/DataCite APIs
+- BibTeX generation with proper formatting  
+- Anytype API connection and basic queries
+- Core duplicate detection functionality
+
+### Full Integration Tests
+Run complete end-to-end tests with temporary space creation:
+```bash
+npm run test:integration
+```
+
+These tests create a temporary space and test the complete workflow, but require manual cleanup afterward.
+
+### Integration Tests
+Run complete tests with temporary space creation:
+```bash
+npm run test:integration
+```
+
+This creates a temporary space and tests:
+- Temporary space creation with unique name (e.g., "BibTest-1234567890")
+- Addition of 4 representative DOIs (reduced to avoid rate limits)
+- Duplicate detection testing by re-adding same DOIs
+- Author and journal uniqueness verification
+- BibTeX formatting validation
+- **Note**: Test spaces need manual cleanup from Anytype UI (API doesn't support space deletion)
+
+See [test/README.md](test/README.md) for detailed test documentation.
+
 ## Development
 
 ```bash
@@ -224,8 +276,14 @@ npm run dev
 # Build the project
 npm run build
 
-# Run tests
+# Run quick tests
 npm test
+
+# Run simple integration tests (recommended)
+npm run test:simple
+
+# Run full integration tests
+npm run test:integration
 
 # Lint code
 npm run lint
@@ -267,6 +325,27 @@ For development, use `npm run dev` which runs the TypeScript source directly wit
 - **Solution**: Run `anytype-bib refresh-bibtex --dry-run` to preview fixes, then `anytype-bib refresh-bibtex --yes` to update all articles
 - **Result**: Authors will be formatted as "LastName, FirstName and LastName, FirstName" which is the standard LaTeX format
 
+## Code Quality Improvements
+
+This version includes significant code improvements:
+
+### ✅ Refactoring Completed
+- **Eliminated Code Duplication**: Extracted shared utilities for name parsing, text normalization, and string sanitization
+- **Improved Error Handling**: Better error messages and validation throughout
+- **Enhanced Type Safety**: More precise TypeScript types for better development experience
+- **Optimized API Calls**: Reduced redundant searches and improved pagination efficiency
+- **Comprehensive Testing**: Added quick validation tests and full integration test suite
+
+### 📊 Test Coverage
+- **Quick Tests**: Validate core logic without external dependencies
+- **Integration Tests**: End-to-end testing with real Anytype API
+- **BibTeX Validation**: Ensures proper LaTeX-compatible formatting
+- **Duplicate Detection**: Verifies author and journal uniqueness
+
+### 🛠 Development Tools
+- Automated test suite for continuous validation
+- Improved build process with better error reporting
+
 ## Roadmap
 
 - [ ] PDF upload support (pending Anytype API)
@@ -275,3 +354,5 @@ For development, use `npm run dev` which runs the TypeScript source directly wit
 - [ ] Export bibliography to various formats
 - [ ] Web interface
 - [ ] Mobile app support
+- [x] Comprehensive test suite
+- [x] Code refactoring and optimization

@@ -11,7 +11,10 @@
     "dev": "tsx watch src/cli/index.ts",
     "start": "node dist/cli/index.js",
     "lint": "eslint src --ext .ts",
-    "test": "jest"
+    "test": "tsx test/run-tests.ts quick",
+    "test:integration": "tsx test/run-tests.ts integration",
+    "test:simple": "tsx test/run-tests.ts simple",
+    "test:quick": "tsx test/run-tests.ts quick"
   },
   "keywords": [
     "anytype",

@@ -1,6 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import { AnytypeObject } from '../types/anytype';
 import { ConfigManager } from '../core/config-manager';
+import { removeAccents, normalizeText, isAbbreviation } from '../utils/text-utils';
 
 export class AnytypeClient {
   private client: AxiosInstance;
@@ -193,13 +194,6 @@ export class AnytypeClient {
       let allResults: AnytypeObject[] = [];
       const seenIds = new Set<string>();
 
-      // Helper to normalize text by removing accents
-      const removeAccents = (text: string): string => {
-        return text
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .toLowerCase();
-      };
 
       // Strategy 1: Try query-based searches with different accent variations
       // This catches results the API can find through its text search
@@ -207,14 +201,16 @@ export class AnytypeClient {
       const fullName = [firstName, lastName].filter(Boolean).join(' ');
 
       searchQueries.add(fullName);
-      searchQueries.add(removeAccents(fullName));
+      searchQueries.add(removeAccents(fullName).toLowerCase());
 
       if (lastName) {
         searchQueries.add(lastName);
-        searchQueries.add(removeAccents(lastName));
+        searchQueries.add(removeAccents(lastName).toLowerCase());
       }
 
-      for (const searchQuery of searchQueries) {
+      const searchQueriesArray = Array.from(searchQueries);
+      for (let i = 0; i < searchQueriesArray.length; i++) {
+        const searchQuery = searchQueriesArray[i];
         let hasMore = true;
         let offset = 0;
         const limit = 100;
@@ -282,40 +278,6 @@ export class AnytypeClient {
       }
 
 
-      // Helper function to normalize text for comparison
-      const normalizeText = (text: string): string => {
-        return text
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .toLowerCase()
-          .replace(/[^\w\s]/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-      };
-
-      // Helper function to check if a name is an abbreviation of another
-      const isAbbreviation = (abbr: string, full: string): boolean => {
-        const normAbbr = normalizeText(abbr);
-        const normFull = normalizeText(full);
-
-        if (normAbbr.length > normFull.length) return false;
-
-        // Single letter abbreviation
-        if (normAbbr.length === 1) {
-          return normFull.startsWith(normAbbr);
-        }
-
-        // Multi-part abbreviation (e.g., "J. P." for "Jean Pierre")
-        const abbrParts = normAbbr.split(/[\s.-]+/);
-        const fullParts = normFull.split(/[\s-]+/);
-
-        if (abbrParts.length > fullParts.length) return false;
-
-        return abbrParts.every((part, i) => {
-          if (i >= fullParts.length) return false;
-          return fullParts[i].startsWith(part);
-        });
-      };
 
       // Filter results for better matching
       if (!lastName) return allResults;

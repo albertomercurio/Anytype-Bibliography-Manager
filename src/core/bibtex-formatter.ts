@@ -1,4 +1,5 @@
 import { DOIMetadata, AuthorInfo } from '../types/crossref';
+import { sanitizeForCiteKey, escapeLatex } from '../utils/text-utils';
 
 export class BibTeXFormatter {
   formatEntry(metadata: DOIMetadata): string {
@@ -38,11 +39,7 @@ export class BibTeXFormatter {
   }
 
   private sanitizeForCiteKey(text: string): string {
-    return text
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-zA-Z0-9]/g, '')
-      .replace(/^(the|a|an)\b/i, '');
+    return sanitizeForCiteKey(text);
   }
 
   private getEntryType(type: 'article' | 'book' | 'chapter' | 'other'): string {
@@ -121,11 +118,7 @@ export class BibTeXFormatter {
   }
 
   private escapeLatex(text: string): string {
-    return text
-      .replace(/\\/g, '\\textbackslash{}')
-      .replace(/[&%$#_{}]/g, '\\$&')
-      .replace(/~/g, '\\textasciitilde{}')
-      .replace(/\^/g, '\\textasciicircum{}');
+    return escapeLatex(text);
   }
 
   parseBibTeX(bibtex: string): {

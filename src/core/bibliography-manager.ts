@@ -3,6 +3,7 @@ import { DOIResolver } from './doi-resolver';
 import { BibTeXFormatter } from './bibtex-formatter';
 import { DuplicateDetector } from './duplicate-detector';
 import { AuthorInfo } from '../types/crossref';
+import { parseFullName } from '../utils/text-utils';
 import chalk from 'chalk';
 import inquirer from 'inquirer';
 import ora from 'ora';
@@ -277,35 +278,7 @@ export class BibliographyManager {
   }
 
   private parseAuthorName(fullName: string): { firstName: string; lastName: string } {
-    const parts = fullName.trim().split(/\s+/);
-    
-    if (parts.length === 0) {
-      return { firstName: '', lastName: '' };
-    } else if (parts.length === 1) {
-      return { firstName: '', lastName: parts[0] };
-    } else if (parts.length === 2) {
-      return { firstName: parts[0], lastName: parts[1] };
-    } else {
-      // For 3+ parts, use heuristics to identify compound last names
-      // Common patterns: "Di", "De", "Van", "Von", "Del", "Da", "La", "Le", etc.
-      const lastNamePrefixes = new Set(['di', 'de', 'van', 'von', 'del', 'da', 'la', 'le', 'el', 'al', 'bin', 'ibn', 'mac', 'mc', 'o', 'san', 'santa']);
-      
-      // Find the start of the last name (look for prefixes)
-      let lastNameStartIndex = parts.length - 1;
-      
-      for (let i = parts.length - 2; i >= 1; i--) {
-        const part = parts[i].toLowerCase();
-        if (lastNamePrefixes.has(part) || part.endsWith('.')) {
-          lastNameStartIndex = i;
-        } else {
-          break;
-        }
-      }
-      
-      const lastName = parts.slice(lastNameStartIndex).join(' ');
-      const firstName = parts.slice(0, lastNameStartIndex).join(' ');
-      return { firstName, lastName };
-    }
+    return parseFullName(fullName);
   }
 
   async refreshBibTeXEntries(options: {
