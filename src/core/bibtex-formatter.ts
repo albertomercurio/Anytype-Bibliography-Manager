@@ -1,4 +1,4 @@
-import { DOIMetadata } from '../types/crossref';
+import { DOIMetadata, AuthorInfo } from '../types/crossref';
 
 export class BibTeXFormatter {
   formatEntry(metadata: DOIMetadata): string {
@@ -60,9 +60,7 @@ export class BibTeXFormatter {
 
     fields.push(`title = {{${this.escapeLatex(metadata.title)}}},`);
 
-    const authorList = metadata.authors
-      .map(author => author.fullName)
-      .join(' and ');
+    const authorList = this.formatAuthors(metadata.authors);
     if (authorList) {
       fields.push(`author = {${this.escapeLatex(authorList)}},`);
     }
@@ -98,6 +96,28 @@ export class BibTeXFormatter {
     }
 
     return fields;
+  }
+
+  private formatAuthors(authors: AuthorInfo[]): string {
+    return authors
+      .map(author => {
+        if (author.familyName && author.givenName) {
+          return `${author.familyName}, ${author.givenName}`;
+        } else if (author.familyName) {
+          return author.familyName;
+        } else if (author.fullName) {
+          // Fallback: try to parse fullName into Last, First format
+          const parts = author.fullName.trim().split(' ');
+          if (parts.length >= 2) {
+            const firstName = parts.slice(0, -1).join(' ');
+            const lastName = parts[parts.length - 1];
+            return `${lastName}, ${firstName}`;
+          }
+          return author.fullName;
+        }
+        return 'Unknown';
+      })
+      .join(' and ');
   }
 
   private escapeLatex(text: string): string {
