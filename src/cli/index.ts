@@ -6,6 +6,7 @@ import inquirer from 'inquirer';
 import * as fs from 'fs';
 import { BibliographyManager } from '../core/bibliography-manager';
 import { ConfigManager } from '../core/config-manager';
+import { startServer } from '../server/server';
 
 // Helper function to check if configuration exists
 function ensureConfigured(): void {
@@ -683,6 +684,28 @@ Articles without DOIs or that fail metadata lookup will be skipped with a warnin
 
     } catch (error: any) {
       console.error(chalk.red('❌ Refresh failed:'), error.message);
+      process.exit(1);
+    }
+  });
+
+
+program
+  .command('server')
+  .description('Start the anytype-bib web server for browser integration.')
+  .addHelpText('after', `
+Examples:
+  $ anytype-bib server                   # Start server on localhost:44556
+
+This command starts a web server that exposes endpoints for browser integration.
+  `)
+  .action(async (options) => {
+    try {
+
+      console.log(chalk.blue(`🛜 Starting anytype-bib server...`));
+      startServer();
+
+    } catch (error: any) {
+      console.error(chalk.red('Error:'), error.message);
       process.exit(1);
     }
   });
