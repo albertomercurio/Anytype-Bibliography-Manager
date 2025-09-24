@@ -115,3 +115,11 @@ export function escapeLatex(text: string): string {
     .replace(/~/g, '\\textasciitilde{}')
     .replace(/\^/g, '\\textasciicircum{}');
 }
+
+/**
+ * Validate if a string is a well-formed DOI
+ */
+export function isValidDOI(doi: string): boolean {
+  const doiPattern = /^10.\d{4,9}\/[-._;()/:A-Z0-9]+$/i;
+  return doiPattern.test(doi);
+}

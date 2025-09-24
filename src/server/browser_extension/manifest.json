@@ -1,0 +1,23 @@
+{
+  "name": "Anytype-bib connect",
+  "description": "Interact with anytype-bib from your browser",
+  "version": "0.1",
+  "manifest_version": 3,
+  "background": {
+    "service_worker": "scripts/background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": [
+        "lib/browser-polyfill.min.js",
+        "scripts/shared/constants.js",
+        "scripts/shared/utils.js",
+        "scripts/content/doi-extractor.js"
+      ]
+    }
+  ],
+  "action": {
+    "default_title": "Send to anytype-bib"
+  }
+}
