@@ -167,104 +167,38 @@ class IntegrationTestSuite {
   private async createObjectTypes(): Promise<void> {
     console.log(chalk.yellow('\\n🔧 Creating required object types in test space...'));
 
-    // Create types in the correct order: dependencies first!
-    const typesToCreate = [
-      // 1. Person first (no dependencies)
-      {
-        name: 'Person',
-        key: 'human',
-        icon: { emoji: '�', format: 'emoji' },
-        layout: 'basic',
-        plural_name: 'People',
-        properties: [
-          { key: 'first_name', name: 'First name', format: 'text' },
-          { key: 'last_name', name: 'Last name', format: 'text' },
-          { key: 'orcid', name: 'ORCID', format: 'text' }
-        ]
-      },
-      // 2. Journal second (no dependencies)
-      {
-        name: 'Journal',
-        key: 'journal',
-        icon: { emoji: '📖', format: 'emoji' },
-        layout: 'basic',
-        plural_name: 'Journals',
-        properties: [
-          { key: 'name', name: 'Name', format: 'text' },
-          { key: 'issn', name: 'ISSN', format: 'text' }
-        ]
-      },
-      // 3. Article last (depends on Person and Journal)
-      {
-        name: 'Article',
-        key: 'reference',
-        icon: { emoji: '�', format: 'emoji' },
-        layout: 'basic',
-        plural_name: 'Articles',
-        properties: [
-          { key: 'title', name: 'Title', format: 'text' },
-          { key: 'authors', name: 'Authors', format: 'objects' },
-          { key: 'journal', name: 'Journal', format: 'objects' },
-          { key: 'year', name: 'Year', format: 'number' },
-          { key: 'doi', name: 'DOI', format: 'text' },
-          { key: 'url', name: 'URL', format: 'url' },
-          { key: 'bib_te_x', name: 'BibTeX', format: 'text' }
-        ]
-      },
-      // 4. Book last (depends on Person)
-      {
-        name: 'Book',
-        key: 'book',
-        icon: { emoji: '📚', format: 'emoji' },
-        layout: 'basic',
-        plural_name: 'Books',
-        properties: [
-          { key: 'title', name: 'Title', format: 'text' },
-          { key: 'authors', name: 'Authors', format: 'objects' },
-          { key: 'year', name: 'Year', format: 'number' },
-          { key: 'isbn', name: 'ISBN', format: 'text' },
-          { key: 'bib_te_x', name: 'BibTeX', format: 'text' }
-        ]
-      }
-    ];
-
     try {
-      const createdTypes: { [key: string]: string } = {};
-
-      for (const typeSpec of typesToCreate) {
-        console.log(chalk.gray(`  Creating type: ${typeSpec.name}...`));
-
-        try {
-          const response = await this.client.post(`/spaces/${this.testSpaceId}/types`, {
-            name: typeSpec.name,
-            key: typeSpec.key,
-            icon: typeSpec.icon,
-            layout: typeSpec.layout,
-            plural_name: typeSpec.plural_name,
-            properties: typeSpec.properties
+      // Create temporary client for setup
+      const tempClient = {
+        spaceId: this.testSpaceId!,
+        client: this.client,
+        async getAllTypesWithProperties() {
+          const response = await this.client.get(`/spaces/${this.spaceId}/types`);
+          return response.data.data || [];
+        },
+        async createNewObjectType(name: string) {
+          const response = await this.client.post(`/spaces/${this.spaceId}/types`, { name });
+          return response.data.data || null;
+        },
+        async createNewProperty(typeId: string, name: string, format: string) {
+          const response = await this.client.post(`/spaces/${this.spaceId}/types/${typeId}/properties`, {
+            name, format
           });
-
-          if (response.data && response.data.type) {
-            const createdTypeKey = response.data.type.key || typeSpec.key;
-            createdTypes[typeSpec.key] = createdTypeKey;
-            console.log(chalk.green(`    ✓ Created ${typeSpec.name} (${createdTypeKey})`));
-          } else {
-            console.log(chalk.yellow(`    ⚠ Created ${typeSpec.name} but unexpected response format`));
-            createdTypes[typeSpec.key] = typeSpec.key; // Assume it worked
-          }
-        } catch (error: any) {
-          console.log(chalk.red(`    ✗ Failed to create ${typeSpec.name}: ${error.message}`));
-          this.testResults.errors.push(`Failed to create type ${typeSpec.name}: ${error.message}`);
-
-          // Try to continue with default key
-          createdTypes[typeSpec.key] = typeSpec.key;
+          return response.data.data || null;
         }
-      }
+      } as any;
+      
+      // Use StreamlinedSetupService
+      const { StreamlinedSetupService } = await import('../src/core/type-setup-service');
+      const setupService = new StreamlinedSetupService(tempClient);
+      
+      // Run the complete setup non-interactively (all types will be created)
+      const typeInfos = await setupService.setupComplete();
 
-      // Update the test config with the created type keys
-      this.updateTypeKeysInConfig(createdTypes);
+      // Update the test config with the created types
+      this.updateTypeInfoInConfig(typeInfos);
 
-      console.log(chalk.green(`\\n  ✓ Object types initialization complete`));
+      console.log(chalk.green(`\\n  ✓ Object types initialization complete using StreamlinedSetupService`));
       this.testResults.typesCreated = true;
 
     } catch (error: any) {
@@ -275,17 +209,17 @@ class IntegrationTestSuite {
     }
   }
 
-  private updateTypeKeysInConfig(typeKeys: { [key: string]: string }): void {
+  private updateTypeInfoInConfig(typeInfos: { [typeName: string]: any }): void {
     try {
       const testConfigPath = process.env.ANYTYPE_BIB_TEST_CONFIG;
       if (testConfigPath && fs.existsSync(testConfigPath)) {
         const config = JSON.parse(fs.readFileSync(testConfigPath, 'utf-8'));
-        config.typeKeys = typeKeys;
+        config.types = typeInfos;
         fs.writeFileSync(testConfigPath, JSON.stringify(config, null, 2));
-        console.log(chalk.gray(`    → Updated test config with type keys`));
+        console.log(chalk.gray(`    → Updated test config with type information`));
       }
     } catch (error: any) {
-      console.log(chalk.yellow(`    ⚠ Could not update config with type keys: ${error.message}`));
+      console.log(chalk.yellow(`    ⚠ Could not update config with type info: ${error.message}`));
     }
   }
 

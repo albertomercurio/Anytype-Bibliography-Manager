@@ -1,12 +1,18 @@
 import axios, { AxiosInstance } from 'axios';
-import { AnytypeObject } from '../types/anytype';
-import { ConfigManager } from '../core/config-manager';
+import { AnytypeObject, AnytypeType } from '../types/anytype';
+import { ConfigManager, TypeInfo } from '../core/config-manager';
 import { removeAccents, normalizeText, isAbbreviation } from '../utils/text-utils';
 
 export class AnytypeClient {
   private client: AxiosInstance;
   private spaceId: string;
-  private typeKeys: {
+  private typeMappings: {
+    article?: TypeInfo;
+    person?: TypeInfo;
+    journal?: TypeInfo;
+    book?: TypeInfo;
+  };
+  private legacyTypeKeys: {
     article: string;
     person: string;
     journal: string;
@@ -33,12 +39,15 @@ export class AnytypeClient {
 
     this.spaceId = spaceId;
 
-    // Use type keys from config, fallback to defaults
-    this.typeKeys = {
-      article: config.typeKeys?.article || 'reference',
-      person: config.typeKeys?.person || 'human',
-      journal: config.typeKeys?.journal || 'journal',
-      book: config.typeKeys?.book || 'book'
+    // Use the new type mappings if available
+    this.typeMappings = config.types || {};
+
+    // Keep legacy type keys for backward compatibility when no types are configured
+    this.legacyTypeKeys = {
+      article: 'reference',
+      person: 'human',
+      journal: 'journal',
+      book: 'book'
     };
 
     this.client = axios.create({
@@ -51,8 +60,67 @@ export class AnytypeClient {
     });
   }
 
+  // Helper method to get type ID (ID-only approach)
+  private getTypeId(typeName: 'article' | 'person' | 'journal' | 'book'): string {
+    const typeInfo = this.typeMappings[typeName];
+    if (typeInfo) {
+      return typeInfo.id;
+    }
+    // Fallback to legacy key approach when no type info is configured
+    return this.legacyTypeKeys[typeName];
+  }
+
+  private getPropertyId(typeName: 'article' | 'person' | 'journal' | 'book', propertyName: string): string | null {
+    const typeInfo = this.typeMappings[typeName];
+    if (typeInfo?.properties[propertyName]) {
+      return typeInfo.properties[propertyName].id;
+    }
+    return null;
+  }
+
+  // Updated method to handle missing properties gracefully
+  private async createObjectWithFallback(
+    typeName: 'article' | 'person' | 'journal' | 'book',
+    objectName: string,
+    properties: Array<{ key: string; [key: string]: any }>
+  ): Promise<string | null> {
+    try {
+      // Get the type ID to use for creation
+      const typeId = this.getTypeId(typeName);
+      
+      // Validate properties and map them to actual property keys if needed
+      const validatedProperties = [];
+      for (const prop of properties) {
+        const mappedId = this.getPropertyId(typeName, prop.key);
+        if (mappedId) {
+          validatedProperties.push({ ...prop, key: mappedId });
+        } else {
+          // Keep original key as fallback
+          validatedProperties.push(prop);
+        }
+      }
+      
+      return await this.createObject(typeId, objectName, validatedProperties);
+    } catch (error) {
+      console.warn(`Failed to create object with type mapping, falling back to legacy approach:`, error);
+      const typeKey = this.legacyTypeKeys[typeName];
+      return await this.createObject(typeKey, objectName, properties);
+    }
+  }
+
+  // Backward compatibility method - returns IDs when available, keys as fallback
   getTypeKeys() {
-    return this.typeKeys;
+    return {
+      article: this.getTypeId('article'),
+      person: this.getTypeId('person'), 
+      journal: this.getTypeId('journal'),
+      book: this.getTypeId('book')
+    };
+  }
+
+  // New method to get type mappings
+  getTypeMappings() {
+    return this.typeMappings;
   }
 
   async searchObjects(filters: any[], limit = 100, offset = 0): Promise<AnytypeObject[]> {
@@ -127,12 +195,65 @@ export class AnytypeClient {
     }
   }
 
+  async getAllTypesWithProperties(): Promise<AnytypeType[]> {
+    try {
+      const response = await this.client.get(`/spaces/${this.spaceId}/types`);
+      return response.data.data || [];
+    } catch (error) {
+      console.error('Error fetching types with properties:', error);
+      return [];
+    }
+  }
+
+  async getTypeByIdOrKey(idOrKey: string): Promise<AnytypeType | null> {
+    try {
+      // First try to get by ID
+      try {
+        const response = await this.client.get(`/spaces/${this.spaceId}/types/${idOrKey}`);
+        return response.data.data || null;
+      } catch {
+        // If failed, try to find by key
+        const allTypes = await this.getAllTypesWithProperties();
+        return allTypes.find(type => type.key === idOrKey) || null;
+      }
+    } catch (error) {
+      console.error('Error fetching type by ID or key:', error);
+      return null;
+    }
+  }
+
+  async createNewObjectType(name: string, layout: string = 'object'): Promise<AnytypeType | null> {
+    try {
+      const response = await this.client.post(`/spaces/${this.spaceId}/types`, {
+        name,
+        layout
+      });
+      return response.data.data || null;
+    } catch (error) {
+      console.error('Error creating new object type:', error);
+      return null;
+    }
+  }
+
+  async createNewProperty(typeId: string, propertyName: string, format: string): Promise<any | null> {
+    try {
+      const response = await this.client.post(`/spaces/${this.spaceId}/types/${typeId}/properties`, {
+        name: propertyName,
+        format
+      });
+      return response.data.data || null;
+    } catch (error) {
+      console.error('Error creating new property:', error);
+      return null;
+    }
+  }
+
   async searchArticlesByDOI(doi: string): Promise<AnytypeObject[]> {
     try {
       // Try searching with the DOI as query first
       const response = await this.client.post(`/spaces/${this.spaceId}/search?limit=100`, {
         query: doi,
-        types: [this.typeKeys.article]
+        types: [this.getTypeId('article')]
       });
 
       let results = response.data.data || [];
@@ -161,7 +282,7 @@ export class AnytypeClient {
       while (hasMore && allArticles.length < 500) {
         try {
           const response = await this.client.post(`/spaces/${this.spaceId}/search?limit=${limit}&offset=${offset}`, {
-            types: [this.typeKeys.article]
+            types: [this.getTypeId('article')]
           });
 
           const pageResults = response.data.data || [];
@@ -219,7 +340,7 @@ export class AnytypeClient {
           try {
             const response = await this.client.post(`/spaces/${this.spaceId}/search?limit=${limit}&offset=${offset}`, {
               query: searchQuery,
-              types: [this.typeKeys.person],
+              types: [this.getTypeId('person')],
               sort: {
                 property_key: 'last_modified_date',
                 direction: 'desc'
@@ -253,7 +374,7 @@ export class AnytypeClient {
       while (hasMore && allResults.length < 1000) {
         try {
           const response = await this.client.post(`/spaces/${this.spaceId}/search?limit=${limit}&offset=${offset}`, {
-            types: [this.typeKeys.person],
+            types: [this.getTypeId('person')],
             sort: {
               property_key: 'last_modified_date',
               direction: 'desc'
@@ -370,7 +491,7 @@ export class AnytypeClient {
       // First try searching with ORCID as query
       const response = await this.client.post(`/spaces/${this.spaceId}/search?limit=100`, {
         query: orcid,
-        types: [this.typeKeys.person]
+        types: [this.getTypeId('person')]
       });
 
       const results = response.data.data || [];
@@ -404,7 +525,7 @@ export class AnytypeClient {
         try {
           const response = await this.client.post(`/spaces/${this.spaceId}/search?limit=${limit}&offset=${offset}`, {
             query: name,
-            types: [this.typeKeys.journal],
+            types: [this.getTypeId('journal')],
             sort: {
               property_key: 'last_modified_date',
               direction: 'desc'
@@ -439,7 +560,7 @@ export class AnytypeClient {
         while (hasMore) {
           try {
             const response = await this.client.post(`/spaces/${this.spaceId}/search?limit=${limit}&offset=${offset}`, {
-              types: [this.typeKeys.journal]
+              types: [this.getTypeId('journal')]
             });
 
             const results = response.data.data || [];
@@ -530,7 +651,7 @@ export class AnytypeClient {
       properties.push({ key: 'bib_te_x', text: article.bibtex });
     }
 
-    return this.createObject(this.typeKeys.article, article.title, properties);
+    return this.createObjectWithFallback('article', article.title, properties);
   }
 
   async createPerson(person: {
@@ -555,11 +676,11 @@ export class AnytypeClient {
       properties.push({ key: 'email', email: person.email });
     }
 
-    return this.createObject(this.typeKeys.person, name, properties);
+    return this.createObjectWithFallback('person', name, properties);
   }
 
   async createJournal(name: string): Promise<string | null> {
-    return this.createObject(this.typeKeys.journal, name, []);
+    return this.createObjectWithFallback('journal', name, []);
   }
 
   async createBook(book: {
@@ -580,6 +701,6 @@ export class AnytypeClient {
       properties.push({ key: 'bib_te_x', text: book.bibtex });
     }
 
-    return this.createObject(this.typeKeys.book, book.title, properties);
+    return this.createObjectWithFallback('book', book.title, properties);
   }
 }

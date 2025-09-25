@@ -2,6 +2,20 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
+export interface PropertyInfo {
+  id: string;
+  name: string;
+  format: string;
+}
+
+export interface TypeInfo {
+  id: string;
+  name: string;
+  properties: {
+    [propertyName: string]: PropertyInfo;
+  };
+}
+
 export interface Config {
   anytype: {
     apiKey: string;
@@ -9,11 +23,11 @@ export interface Config {
     host: string;
     port: string;
   };
-  typeKeys?: {
-    article?: string;
-    person?: string;
-    journal?: string;
-    book?: string;
+  types?: {
+    article?: TypeInfo;
+    person?: TypeInfo;
+    journal?: TypeInfo;
+    book?: TypeInfo;
   };
   ai?: {
     openaiApiKey?: string;
@@ -83,7 +97,10 @@ export class ConfigManager {
    * Update specific configuration values
    */
   updateConfig(updates: Partial<Config>): void {
-    const currentConfig = this.getConfig() || this.getDefaultConfig();
+    const currentConfig = this.getConfig();
+    if (!currentConfig) {
+      throw new Error('No configuration found. Run setup first.');
+    }
     const newConfig = this.mergeConfig(currentConfig, updates);
     this.saveConfig(newConfig);
   }
@@ -96,34 +113,7 @@ export class ConfigManager {
     return !!(config?.anytype?.apiKey && config?.anytype?.spaceId);
   }
 
-  /**
-   * Get default configuration
-   */
-  private getDefaultConfig(): Config {
-    return {
-      anytype: {
-        apiKey: '',
-        spaceId: '',
-        host: 'localhost',
-        port: '31009'
-      },
-      typeKeys: {
-        article: 'reference',
-        person: 'human',
-        journal: 'journal',
-        book: 'book'
-      },
-      ai: {
-        openaiApiKey: '',
-        anthropicApiKey: ''
-      },
-      settings: {
-        debug: false,
-        maxRetryAttempts: 3,
-        duplicateThreshold: 0.8
-      }
-    };
-  }
+
 
   /**
    * Deep merge configuration objects
@@ -182,32 +172,5 @@ export class ConfigManager {
     if (!config.anytype?.spaceId) missing.push('Anytype Space ID');
 
     return { valid: missing.length === 0, missing };
-  }
-
-  /**
-   * Create configuration from environment variables (for migration)
-   */
-  static fromEnvironment(): Config | null {
-    if (!process.env.ANYTYPE_API_KEY || !process.env.ANYTYPE_SPACE_ID) {
-      return null;
-    }
-
-    return {
-      anytype: {
-        apiKey: process.env.ANYTYPE_API_KEY,
-        spaceId: process.env.ANYTYPE_SPACE_ID,
-        host: process.env.ANYTYPE_HOST || 'localhost',
-        port: process.env.ANYTYPE_PORT || '31009'
-      },
-      ai: {
-        openaiApiKey: process.env.OPENAI_API_KEY || '',
-        anthropicApiKey: process.env.ANTHROPIC_API_KEY || ''
-      },
-      settings: {
-        debug: process.env.DEBUG === 'true',
-        maxRetryAttempts: parseInt(process.env.MAX_RETRY_ATTEMPTS || '3'),
-        duplicateThreshold: parseFloat(process.env.DUPLICATE_THRESHOLD || '0.8')
-      }
-    };
   }
 }

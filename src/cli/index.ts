@@ -3,6 +3,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import inquirer from 'inquirer';
+import axios from 'axios';
 import * as fs from 'fs';
 import { BibliographyManager } from '../core/bibliography-manager';
 import { ConfigManager } from '../core/config-manager';
@@ -233,23 +234,7 @@ Troubleshooting:
       configManager.deleteConfig();
     }
 
-    // Check if migrating from .env file
-    const envConfig = ConfigManager.fromEnvironment();
-    if (envConfig && !configManager.isConfigured()) {
-      const migrateAnswer = await inquirer.prompt([{
-        type: 'confirm',
-        name: 'migrate',
-        message: 'Found existing .env configuration. Would you like to migrate to the new config system?',
-        default: true
-      }]);
-
-      if (migrateAnswer.migrate) {
-        configManager.saveConfig(envConfig);
-        console.log(chalk.green('✅ Configuration migrated successfully!'));
-        console.log(chalk.gray(`Configuration saved to: ${configManager.getConfigPath()}`));
-        return;
-      }
-    }
+    // For now, we don't support migration from old configs since the structure is completely different
 
     const answers = await inquirer.prompt([
       {
@@ -330,55 +315,69 @@ Troubleshooting:
       configManager.saveConfig(config);
       console.log(chalk.green('\n✅ Basic configuration saved!'));
 
-      // Now try to discover object types
-      console.log(chalk.blue('🔍 Discovering object types in your Anytype space...'));
+      // Now set up object types and properties interactively
+      console.log(chalk.blue('� Setting up object types and properties...'));
       
       try {
-        const { AnytypeClient } = await import('../anytype/client');
-        const client = new AnytypeClient();
-        const discoveredTypes = await client.discoverObjectTypes();
+        // Create temporary client for setup
+        const tempClient = axios.create({
+          baseURL: `http://${config.anytype.host}:${config.anytype.port}/v1`,
+          headers: {
+            'Authorization': `Bearer ${config.anytype.apiKey}`,
+            'Content-Type': 'application/json',
+            'Anytype-Version': '2025-05-20'
+          }
+        });
+        
+        // Create a minimal client wrapper for setup
+        const setupClient = {
+          spaceId: config.anytype.spaceId,
+          async getAllTypesWithProperties() {
+            const response = await tempClient.get(`/spaces/${config.anytype.spaceId}/types`);
+            return response.data.data || [];
+          },
+          async createNewObjectType(name: string) {
+            const response = await tempClient.post(`/spaces/${config.anytype.spaceId}/types`, { name });
+            return response.data.data || null;
+          },
+          async createNewProperty(typeId: string, name: string, format: string) {
+            const response = await tempClient.post(`/spaces/${config.anytype.spaceId}/types/${typeId}/properties`, {
+              name, format
+            });
+            return response.data.data || null;
+          }
+        } as any;
 
-        if (Object.keys(discoveredTypes).length > 0) {
-          console.log(chalk.green('✓ Found object types:'));
+        const { StreamlinedSetupService } = await import('../core/type-setup-service');
+        const setupService = new StreamlinedSetupService(setupClient);
+        
+        // Interactive type setup
+        const typeInfos = await setupService.setupComplete();
+
+        if (Object.keys(typeInfos).length > 0) {
+          // Update config with the new type information
+          const finalConfig = { 
+            ...config, 
+            types: typeInfos
+          };
+          configManager.saveConfig(finalConfig);
+          console.log(chalk.green('\n✅ Object type and property setup complete!'));
           
-          const typeKeys: { [key: string]: string } = {};
-          const requiredTypes = ['article', 'person', 'journal', 'book'];
-          const missingTypes: string[] = [];
-
-          for (const requiredType of requiredTypes) {
-            if (discoveredTypes[requiredType]) {
-              typeKeys[requiredType] = discoveredTypes[requiredType];
-              console.log(chalk.gray(`  ${requiredType}: ${discoveredTypes[requiredType]}`));
-            } else {
-              missingTypes.push(requiredType);
-            }
-          }
-
-          if (missingTypes.length > 0) {
-            console.log(chalk.yellow(`\n⚠️  Could not find these object types: ${missingTypes.join(', ')}`));
-            console.log(chalk.yellow('Using default type keys. You may need to create these object types in your Anytype space.'));
-            
-            // Add default keys for missing types
-            const defaults = { article: 'reference', person: 'human', journal: 'journal', book: 'book' };
-            for (const missing of missingTypes) {
-              typeKeys[missing] = defaults[missing as keyof typeof defaults];
-            }
-          }
-
-          // Update config with discovered type keys
-          const finalConfig = { ...config, typeKeys };
-          configManager.saveConfig(finalConfig);
-          console.log(chalk.green('✅ Object type discovery complete!'));
+          console.log(chalk.blue('\n📋 Configuration Summary:'));
+          Object.keys(typeInfos).forEach(typeName => {
+            const typeInfo = typeInfos[typeName];
+            console.log(chalk.gray(`  ${typeName}: ${typeInfo.name} (ID: ${typeInfo.id})`));
+            const propCount = Object.keys(typeInfo.properties).length;
+            console.log(chalk.gray(`    Properties configured: ${propCount}`));
+          });
         } else {
-          console.log(chalk.yellow('⚠️  Could not discover object types. Using defaults.'));
-          const finalConfig = { ...config, typeKeys: { article: 'reference', person: 'human', journal: 'journal', book: 'book' } };
-          configManager.saveConfig(finalConfig);
+          console.log(chalk.yellow('⚠️  No object types were configured.'));
+          configManager.saveConfig(config);
         }
-      } catch {
-        console.log(chalk.yellow('⚠️  Could not discover object types (API connection issue). Using defaults.'));
-        console.log(chalk.gray('You can run setup again later to rediscover types.'));
-        const finalConfig = { ...config, typeKeys: { article: 'reference', person: 'human', journal: 'journal', book: 'book' } };
-        configManager.saveConfig(finalConfig);
+      } catch (error: any) {
+        console.log(chalk.yellow(`⚠️  Could not set up object types (${error.message}). Setup incomplete.`));
+        console.log(chalk.gray('You can run setup again later to configure types properly.'));
+        configManager.saveConfig(config);
       }
 
       console.log(chalk.gray(`\nConfiguration location: ${configManager.getConfigPath()}`));
